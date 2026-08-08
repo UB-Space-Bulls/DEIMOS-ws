@@ -1,1 +1,73 @@
+# =============================================================================
+# Dockerfile.basestation — Ground control station
+# ROS 2 Jazzy + Zenoh + RViz2 + teleop
+# This is the STABLE image — the software that actually runs during
+# competition on the base station computer. Keep this isolated from
+# Dockerfile.dev on purpose; changes here should be deliberate, reviewed, and
+# tested, not casual experimentation.
+# =============================================================================
 
+FROM ros:jazzy-desktop
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROS_DISTRO=jazzy
+
+# -----------------------------------------------------------------------------
+# Base tooling
+# (ros:jazzy-desktop already includes RViz2 and rqt tools, unlike the
+# ros-base image used in Dockerfile.dev — the base station needs the GUI.)
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl wget git \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Teleop + monitoring
+# Swap/extend this once you've picked your actual GUI approach — this is a
+# reasonable starting point, not a final decision.
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-teleop-twist-keyboard \
+    ros-jazzy-teleop-twist-joy \
+    ros-jazzy-joy \
+    ros-jazzy-rqt \
+    ros-jazzy-rqt-common-plugins \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Nav2 (bringup/visualization only — base station observes and sends goals,
+# it doesn't run the planner itself; that's on the Jetson)
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-nav2-bringup \
+    ros-jazzy-navigation2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Zenoh RMW — this is the link back to the rover
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-rmw-zenoh-cpp \
+    && rm -rf /var/lib/apt/lists/*
+ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
+
+# -----------------------------------------------------------------------------
+# Workspace
+# -----------------------------------------------------------------------------
+ENV ROS_WS=/workspaces/basestation_ws
+RUN mkdir -p ${ROS_WS}/src
+WORKDIR ${ROS_WS}
+
+# Unlike Dockerfile.dev, this image is meant to run a specific, tested build —
+# COPY your basestation_ws/src in here once the GUI/monitoring package is
+# stable, rather than bind-mounting for live edits. This is the image that
+# should NOT change casually mid-competition.
+# COPY ./basestation_ws/src ${ROS_WS}/src
+
+# -----------------------------------------------------------------------------
+# Entrypoint
+# -----------------------------------------------------------------------------
+COPY ros_entrypoint.sh /
+RUN chmod +x /ros_entrypoint.sh
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]
