@@ -1,0 +1,221 @@
+<?xml version="1.0"?>
+<robot name="rover" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Placeholder geometry only, to wire up and test the Gazebo + ros2_control +
+    Nav2 pipeline before a real chassis model exists. Replace the box/cylinder
+    links below with real geometry when ready; keep the steer/wheel joint
+    names in sync with config/rover_controllers.yaml and
+    rover_swerve_controller/swerve_kinematics_node.py if you rename them.
+
+    Swerve drivetrain: 4 independently-steerable wheel modules. Each module
+    is a steer joint (vertical pivot) with a wheel joint (rolling axis) as
+    its child. There's no stock ros2_controllers swerve plugin, so steering
+    and wheel-speed commands are driven by two forward_command_controllers
+    (see config/rover_controllers.yaml), fed by a custom inverse-kinematics
+    node in the rover_swerve_controller package that converts /cmd_vel into
+    per-module steer-angle + wheel-speed commands.
+  -->
+
+  <xacro:property name="chassis_length" value="0.6"/>
+  <xacro:property name="chassis_width" value="0.4"/>
+  <xacro:property name="chassis_height" value="0.2"/>
+  <xacro:property name="wheel_radius" value="0.15"/>
+  <xacro:property name="wheel_width" value="0.08"/>
+  <xacro:property name="wheel_separation" value="0.5"/>
+  <xacro:property name="wheel_base" value="0.4"/>
+  <xacro:property name="steer_housing_radius" value="0.05"/>
+  <xacro:property name="steer_housing_height" value="0.08"/>
+
+  <material name="chassis_grey">
+    <color rgba="0.3 0.3 0.3 1"/>
+  </material>
+  <material name="wheel_black">
+    <color rgba="0.1 0.1 0.1 1"/>
+  </material>
+
+  <link name="base_link"/>
+
+  <joint name="chassis_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="chassis_link"/>
+    <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="chassis_link">
+    <visual>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <material name="chassis_grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="15.0"/>
+      <inertia ixx="0.3" ixy="0.0" ixz="0.0" iyy="0.5" iyz="0.0" izz="0.6"/>
+    </inertial>
+  </link>
+
+  <!--
+    Swerve module: a steer joint (vertical pivot, rotates the whole module
+    about Z) with a wheel joint as its child (spins the wheel about its own
+    rolling axis). The wheel joint's origin is defined relative to the steer
+    link, so it stays correctly oriented no matter what angle the module is
+    currently steered to.
+  -->
+  <xacro:macro name="swerve_module" params="prefix x_reflect y_reflect">
+    <joint name="${prefix}_steer_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${prefix}_steer_link"/>
+      <origin xyz="${x_reflect * wheel_base / 2} ${y_reflect * wheel_separation / 2} ${wheel_radius}" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+    </joint>
+    <link name="${prefix}_steer_link">
+      <visual>
+        <geometry>
+          <cylinder radius="${steer_housing_radius}" length="${steer_housing_height}"/>
+        </geometry>
+        <material name="chassis_grey"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${steer_housing_radius}" length="${steer_housing_height}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="0.5"/>
+        <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="${prefix}_steer_link"/>
+      <child link="${prefix}_wheel_link"/>
+      <origin xyz="0 0 0" rpy="${-pi/2} 0 0"/>
+      <axis xyz="0 0 1"/>
+    </joint>
+    <link name="${prefix}_wheel_link">
+      <visual>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="wheel_black"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="1.5"/>
+        <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.015"/>
+      </inertial>
+    </link>
+  </xacro:macro>
+
+  <xacro:swerve_module prefix="front_left" x_reflect="1" y_reflect="1"/>
+  <xacro:swerve_module prefix="front_right" x_reflect="1" y_reflect="-1"/>
+  <xacro:swerve_module prefix="rear_left" x_reflect="-1" y_reflect="1"/>
+  <xacro:swerve_module prefix="rear_right" x_reflect="-1" y_reflect="-1"/>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="chassis_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="0 0 ${chassis_height / 2 + 0.05}" rpy="0 0 0"/>
+  </joint>
+  <link name="lidar_link">
+    <visual>
+      <geometry><cylinder radius="0.04" length="0.06"/></geometry>
+      <material name="wheel_black"/>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="0.04" length="0.06"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.2"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <!-- Frame reserved for the stereo camera; no sensor plugin yet — lidar-based
+       slam_toolbox is the near-term priority per CLAUDE.md's SLAM go/no-go plan. -->
+  <joint name="camera_joint" type="fixed">
+    <parent link="chassis_link"/>
+    <child link="camera_link"/>
+    <origin xyz="${chassis_length / 2} 0 0.05" rpy="0 0 0"/>
+  </joint>
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.03 0.09 0.03"/></geometry>
+      <material name="chassis_grey"/>
+    </visual>
+    <collision>
+      <geometry><box size="0.03 0.09 0.03"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.00005" ixy="0.0" ixz="0.0" iyy="0.00005" iyz="0.0" izz="0.00005"/>
+    </inertial>
+  </link>
+
+  <xacro:macro name="steer_ros2_control" params="prefix">
+    <joint name="${prefix}_steer_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="wheel_ros2_control" params="prefix">
+    <joint name="${prefix}_wheel_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="velocity"/>
+      <state_interface name="position"/>
+    </joint>
+  </xacro:macro>
+
+  <ros2_control name="gz_ros2_control_system" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+    <xacro:steer_ros2_control prefix="front_left"/>
+    <xacro:wheel_ros2_control prefix="front_left"/>
+    <xacro:steer_ros2_control prefix="front_right"/>
+    <xacro:wheel_ros2_control prefix="front_right"/>
+    <xacro:steer_ros2_control prefix="rear_left"/>
+    <xacro:wheel_ros2_control prefix="rear_left"/>
+    <xacro:steer_ros2_control prefix="rear_right"/>
+    <xacro:wheel_ros2_control prefix="rear_right"/>
+  </ros2_control>
+
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find rover_description)/config/rover_controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+  <gazebo reference="lidar_link">
+    <sensor name="lidar" type="gpu_lidar">
+      <topic>scan</topic>
+      <update_rate>10</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.1</min>
+          <max>30.0</max>
+        </range>
+      </ray>
+    </sensor>
+  </gazebo>
+
+</robot>
