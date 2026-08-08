@@ -1,6 +1,6 @@
 # =============================================================================
 # Dockerfile.dev — Portable x86_64 dev environment
-# ROS 2 Jazzy + Nav2 + MoveIt 2 + ros2_control + Zenoh
+# ROS 2 Jazzy + Nav2 + MoveIt 2 + ros2_control + Zenoh + Gazebo Harmonic
 # For writing and unit-testing Jetson-bound code on any laptop (Win/Mac/Linux,
 # GPU or no GPU). Deliberately does NOT include Isaac ROS's GPU-accelerated
 # perception packages — those need real Tegra hardware. This image is safe to
@@ -43,10 +43,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
 
 # -----------------------------------------------------------------------------
-# (Optional, later) Simulation tools go here once the sim environment is
-# picked — e.g. Gazebo packages, or an Isaac Sim client if you go that route.
-# Left out for now so this image builds fast and stays lean.
+# Simulation — Gazebo Harmonic
+# ros-jazzy-ros-gz bridges ROS 2 topics/services/TF to Gazebo (Jazzy's default
+# paired Gazebo release is Harmonic). gz-ros2-control lets ros2_control drive
+# the simulated robot the same way it'll drive real hardware, so controller
+# definitions stay swappable between sim and the Jetson per CLAUDE.md.
 # -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-ros-gz \
+    ros-jazzy-gz-ros2-control \
+    && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
 # Workspace
