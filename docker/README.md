@@ -10,61 +10,28 @@ We maintain three primary images:
 
 The **development image is currently built**. The base-station and Jetson images remain part of the target architecture and should be brought online as their runtime requirements are finalized.
 
----
+## Building and Running the Development Image
 
-## Software Shared Across Environments
+Run from the repo root:
 
-The project uses **ROS 2 Jazzy** across all three environments:
-
-- Jetson, through JetPack 7.2 on NVIDIA Orin hardware
-- Base station
-- Development environment
-
-Other major shared components include:
-
-- **Zenoh through `rmw_zenoh_cpp`** as the ROS 2 RMW/messaging layer between the base station and rover
-- **Nav2** for navigation and path planning
-- **MoveIt 2** for manipulation and arm motion planning
-- **ros2_control** for controller definitions, hardware abstraction, and low-level actuator control
-
-**Isaac ROS is experimental in the current Space Bulls architecture.** The team intends to use it only in the Jetson environment for GPU-accelerated perception, but individual packages must be validated on the exact Orin + JetPack 7.2 configuration before they are treated as production-ready. Core rover operation should not depend on Isaac ROS until that validation is complete.
-
----
-
-# Zenoh Deployment
-
-Zenoh networking should be deliberately configured rather than treated as an invisible implementation detail.
-
-ROS 2 nodes use `rmw_zenoh_cpp`, which connects them into the Zenoh network. The rover and base station should use a defined router/client topology with version-controlled configuration.
-
-A simplified topology is:
-
-```text
-Base Station ROS 2 Nodes
-        ↓
-   rmw_zenoh_cpp
-        ↓
-  Zenoh Router
-        ↓
-   Rover Network
-        ↓
-  Zenoh Router / Client
-        ↓
-   rmw_zenoh_cpp
-        ↓
-Rover ROS 2 Nodes
+```bash
+docker build -f docker/dockerfile.dev -t rover-dev .
+docker run -it --rm -v $(pwd)/rover_ws:/workspaces/rover_ws rover-dev
 ```
 
-The exact router/client arrangement can be adjusted after rover networking tests, but the deployment should remain explicit and reproducible.
+The `-v` bind mount maps the local `rover_ws` into the container so edits made outside the container are reflected inside it live.
 
-Zenoh configuration files should eventually be stored in version control, for example:
+## Why `dev` and `jetson` Bind-Mount the Workspace
 
-```text
-config/
-└── zenoh/
-    ├── basestation.json5
-    └── rover.json5
-```
+`dockerfile.dev` and `dockerfile.jetson` both mount `rover_ws` from the host at `docker run` time instead of `COPY`-ing it into the image. The image only provides the OS, ROS 2 Jazzy, and the rest of the toolchain — the actual rover source lives outside the container and is attached live.
+
+The practical effect: team members build the image **once**, then just re-run the container to pick up code changes in `rover_ws`. A rebuild is only needed when the *Dockerfile itself* changes — new system/apt packages, a different base image tag, etc. — not for ordinary source edits.
+
+`dockerfile.basestation` intentionally works the other way: it `COPY`s tested code into the image rather than bind-mounting it, so ground-control software only updates through a deliberate, reviewed rebuild instead of live edits.
+
+---
+
+For the shared ROS 2 software stack (Zenoh, Nav2, MoveIt 2, ros2_control, Isaac ROS) and the Zenoh network topology, see the top-level [`README.md`](../README.md). The rest of this document covers Docker-specific details: what transfers between the development and Jetson environments, and how platform-specific code should be structured.
 
 ---
 
@@ -162,20 +129,7 @@ These components may still share source code with the development environment, b
 
 # Simulation
 
-## Gazebo Harmonic
-
-**Gazebo Harmonic is the primary team-wide simulator.**
-
-It should be broadly usable by developers for testing:
-
-- Nav2
-- MoveIt 2
-- ros2_control through `gz_ros2_control`
-- Mission logic
-- Robot descriptions and transforms
-- General ROS 2 integration
-
-Gazebo Harmonic should be the default simulator used inside the development environment.
+Gazebo Harmonic is the default simulator and runs inside the development image — see the top-level [`README.md`](../README.md) for the full simulation strategy (Gazebo Harmonic vs. optional Isaac Sim).
 
 A major goal is to keep the control structure similar between simulation and hardware:
 
@@ -192,20 +146,6 @@ gz_ros2_control  Real Hardware Interface
    │             │
 Gazebo Harmonic  Motors / Sensors
 ```
-
-## Isaac Sim
-
-**Isaac Sim is optional and GPU-gated.**
-
-Its likely future uses include:
-
-- Synthetic training data generation
-- Object-detection dataset generation
-- Waypoint-detection dataset generation
-- Perception verification
-- More advanced photorealistic simulation
-
-Isaac Sim is **not required for the current development workflow and is not blocking the software stack**. It should be revisited later when perception development can benefit from it.
 
 ---
 
