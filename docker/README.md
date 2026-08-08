@@ -4,91 +4,36 @@ This directory contains the Docker environments used to build, test, and run Spa
 
 We maintain three primary images:
 
-- **Development** — used by team members to write, build, test, and simulate rover software.
-- **Base Station** — used for software that runs on the operator/base-station computer.
-- **Jetson** — used for software that runs onboard the rover's NVIDIA Jetson computers.
+- **`Dockerfile.dev`** — x86_64 development environment for Jetson-bound code. This is the environment team members should normally use while writing, building, testing, and simulating software. It is intentionally safe to modify and break during development.
+- **`Dockerfile.basestation`** — x86_64 base-station environment for stable ground-control software. This image should remain comparatively stable and should be protected from casual development changes.
+- **`Dockerfile.jetson`** — ARM64 onboard environment for the NVIDIA Jetson Orin computers. This contains the rover runtime stack and Jetson-specific dependencies, including Isaac ROS.
 
-The goal is to keep the ROS 2 software itself as portable as possible while separating machine-specific dependencies into the appropriate Docker image.
-
-## Directory Layout
-
-```text
-docker/
-├── dev/
-│   └── Dockerfile
-├── basestation/
-│   └── Dockerfile
-├── jetson/
-│   └── Dockerfile
-└── README.md
-```
-
-The exact contents of each image will evolve as the rover software stack develops.
+The **development image is currently built**. The base-station and Jetson images remain part of the target architecture and should be brought online as their runtime requirements are finalized.
 
 ---
 
-## Development Image
+## Software Shared Across Environments
 
-The development image provides a consistent environment for writing and testing rover software.
+The project uses **ROS 2 Jazzy** across all three environments:
 
-It should contain the common tools and dependencies needed by developers, such as:
+- Jetson, through JetPack 7.2 on NVIDIA Orin hardware
+- Base station
+- Development environment
 
-- ROS 2 Jazzy
-- Zenoh RMW
-- ROS 2 build tools
-- Testing and debugging tools
-- Simulation dependencies
-- Common rover software dependencies
+Other major shared components include:
 
-The development image should avoid depending on Jetson-specific hardware or NVIDIA Tegra libraries unless they are specifically required for a development workflow.
+- **Zenoh** as the ROS 2 RMW/messaging layer between the base station and rover
+- **Nav2** for navigation and path planning
+- **MoveIt 2** for manipulation and arm motion planning
+- **ros2_control** for controller definitions, hardware abstraction, and low-level actuator control
 
-**Use this image for normal software development.**
-
----
-
-## Base Station Image
-
-The base-station image contains software required by the rover operator station.
-
-This may include:
-
-- ROS 2 Jazzy
-- Zenoh RMW
-- Teleoperation nodes
-- Operator interfaces
-- Visualization and diagnostics
-- Mission-control software
-- Base-station launch files and configuration
-
-The base station should generally remain independent of Jetson-specific libraries.
-
-**Use this image for software that runs on the operator computer.**
-
----
-
-## Jetson Image
-
-The Jetson image contains software that runs onboard the rover's NVIDIA Jetson computers.
-
-This includes the common ROS 2 stack plus hardware- and GPU-specific dependencies such as:
-
-- ROS 2 Jazzy
-- Zenoh RMW
-- Isaac ROS
-- NVIDIA / Jetson runtime dependencies
-- Hardware interfaces
-- Sensor drivers
-- Rover runtime packages
-
-This is where software that directly depends on the Jetson platform, onboard sensors, GPU acceleration, or physical rover hardware should be validated and run.
-
-**Use this image for software running physically onboard the rover.**
+**Isaac ROS is Jetson-only** because it depends on the NVIDIA Jetson/Tegra GPU platform. Individual packages still need to be validated on the team's exact Orin + JetPack 7.2 hardware configuration.
 
 ---
 
 # What Transfers From Development to Jetson?
 
-A major goal of this architecture is for most rover software to be developed and tested in the development image, then moved to the Jetson environment with little or no code change.
+A major goal of this architecture is for most rover software to be developed and tested in `Dockerfile.dev`, then run in `Dockerfile.jetson` with little or no source-code change.
 
 As a general rule:
 
@@ -98,10 +43,23 @@ As a general rule:
 
 The following should generally transfer cleanly from the development environment to the Jetson:
 
-- **Nav2 configuration** — costmap, planner, controller, behavior, and other parameter files
-- **Nav2 launch files**
-- **MoveIt 2 configuration** — SRDF, planning groups, kinematics configuration, planning parameters, and launch files
-- **ros2_control controller definitions** — controller YAML files, controller configuration, and portable controller logic
+- **Nav2 configuration**
+  - Costmap parameters
+  - Planner parameters
+  - Controller parameters
+  - Behavior configuration
+  - Launch files
+- **MoveIt 2 configuration**
+  - SRDF
+  - Planning groups
+  - Kinematics configuration
+  - Planning parameters
+  - Launch files
+- **ros2_control controller definitions**
+  - Controller YAML files
+  - Controller configuration
+  - Controller gains
+  - Portable controller logic
 - **Custom ROS 2 nodes** for:
   - Mission logic
   - Autonomy
@@ -114,13 +72,13 @@ The following should generally transfer cleanly from the development environment
 - **Parameter files** that do not contain machine-specific paths or device identifiers
 - **Unit tests** for the above software
 
-These components should be written so that their behavior depends on ROS interfaces rather than the specific computer they happen to run on.
+These components should depend on ROS interfaces rather than on the specific computer they happen to run on.
 
 ---
 
-## May Require Jetson-Specific Changes or Validation
+## Requires Jetson-Specific Validation or Integration
 
-Some software cannot be treated as completely portable because it depends on the onboard hardware or NVIDIA software stack.
+Some software depends directly on the onboard hardware or NVIDIA software stack and therefore cannot be assumed to transfer without validation.
 
 Examples include:
 
@@ -138,13 +96,46 @@ Examples include:
 - Device-specific udev rules
 - Machine-specific networking or device configuration
 
-These components may still share source code with the development environment, but they must be tested in the Jetson container with the actual hardware and runtime dependencies.
+These components may still share source code with the development environment, but they must be tested in the Jetson image with the actual hardware and runtime dependencies.
+
+---
+
+# Simulation
+
+## Gazebo
+
+**Gazebo is the primary team-wide simulator.**
+
+It should remain CPU-friendly and broadly usable by developers for testing:
+
+- Nav2
+- MoveIt 2
+- ros2_control
+- Mission logic
+- Robot descriptions and transforms
+- General ROS 2 integration
+
+Gazebo should be the default simulator used inside the development environment.
+
+## Isaac Sim
+
+**Isaac Sim is optional and GPU-gated.**
+
+Its likely future uses include:
+
+- Synthetic training data generation
+- Object-detection dataset generation
+- Waypoint-detection dataset generation
+- Perception verification
+- More advanced photorealistic simulation
+
+Isaac Sim is **not required for the current development workflow and is not blocking the software stack**. It should be revisited later when perception development can benefit from it.
 
 ---
 
 # Keep Platform Differences Out of ROS Logic
 
-Whenever possible, rover software should be structured so that platform-specific details remain at the edges of the system.
+Whenever possible, rover software should be structured so platform-specific details remain at the edges of the system.
 
 For example:
 
@@ -178,20 +169,18 @@ This separation allows higher-level software to be developed and tested without 
 
 ---
 
-# Development Workflow
-
-The intended workflow is approximately:
+# Intended Development Workflow
 
 ```text
-Develop in dev image
+Develop in Dockerfile.dev
         ↓
 Build and test
         ↓
-Test ROS interfaces / simulation
+Test ROS interfaces in Gazebo / unit tests
         ↓
-Run the same rover packages in Jetson image
+Run the same rover packages in Dockerfile.jetson
         ↓
-Validate hardware-specific behavior on rover
+Validate hardware- and GPU-specific behavior on rover
 ```
 
 The Docker images provide different environments, but they should run the **same rover source packages whenever practical**.
