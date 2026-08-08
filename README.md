@@ -191,9 +191,9 @@ The project uses three Docker images with intentionally different responsibiliti
 
 | Dockerfile | Architecture | Purpose |
 |---|---|---|
-| `Dockerfile.jetson` | ARM64 | Onboard rover runtime environment; Jetson-specific dependencies and experimentally validated Isaac ROS packages |
-| `Dockerfile.basestation` | x86_64 | Stable ground-control environment; protected from casual development changes |
-| `Dockerfile.dev` | x86_64 | Portable development environment for Jetson-bound source code; safe to modify and break during development |
+| `dockerfile.jetson` | ARM64 | Onboard rover runtime environment; Jetson-specific dependencies and experimentally validated Isaac ROS packages |
+| `dockerfile.basestation` | x86_64 | Stable ground-control environment; protected from casual development changes |
+| `dockerfile.dev` | x86_64 | Portable development environment for Jetson-bound source code; safe to modify and break during development |
 
 The **development image is currently built**.
 

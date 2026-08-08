@@ -4,9 +4,9 @@ This directory contains the Docker environments used to build, test, and run Spa
 
 We maintain three primary images:
 
-- **`Dockerfile.dev`** — x86_64 development environment for Jetson-bound source code. This is the environment team members should normally use while writing, building, testing, and simulating software. It is intentionally safe to modify and break during development.
-- **`Dockerfile.basestation`** — x86_64 base-station environment for stable ground-control software. This image should remain comparatively stable and should be protected from casual development changes.
-- **`Dockerfile.jetson`** — ARM64 onboard environment for NVIDIA Jetson Orin computers. This contains the rover runtime stack, Jetson-specific dependencies, and any Isaac ROS packages that have been validated on the team's hardware.
+- **`dockerfile.dev`** — x86_64 development environment for Jetson-bound source code. This is the environment team members should normally use while writing, building, testing, and simulating software. It is intentionally safe to modify and break during development.
+- **`dockerfile.basestation`** — x86_64 base-station environment for stable ground-control software. This image should remain comparatively stable and should be protected from casual development changes.
+- **`dockerfile.jetson`** — ARM64 onboard environment for NVIDIA Jetson Orin computers. This contains the rover runtime stack, Jetson-specific dependencies, and any Isaac ROS packages that have been validated on the team's hardware.
 
 The **development image is currently built**. The base-station and Jetson images remain part of the target architecture and should be brought online as their runtime requirements are finalized.
 
@@ -70,7 +70,7 @@ config/
 
 # What Transfers From Development to Jetson?
 
-A major goal of this architecture is for most rover software to be developed and tested in `Dockerfile.dev`, then built and run in `Dockerfile.jetson` with little or no **source-code** change.
+A major goal of this architecture is for most rover software to be developed and tested in `dockerfile.dev`, then built and run in `dockerfile.jetson` with little or no **source-code** change.
 
 As a general rule:
 
@@ -89,7 +89,7 @@ The intended model is:
                       │
              ┌────────┴────────┐
              │                 │
-     Dockerfile.dev      Dockerfile.jetson
+     dockerfile.dev      dockerfile.jetson
           x86_64               ARM64
              │                 │
        colcon build       colcon build
@@ -248,13 +248,13 @@ This separation allows higher-level software to be developed and tested without 
 # Intended Development Workflow
 
 ```text
-Develop source in Dockerfile.dev
+Develop source in dockerfile.dev
         ↓
 Build and test for x86_64
         ↓
 Test ROS interfaces in Gazebo Harmonic / unit tests
         ↓
-Use the same rover source in Dockerfile.jetson
+Use the same rover source in dockerfile.jetson
         ↓
 Rebuild for ARM64
         ↓
