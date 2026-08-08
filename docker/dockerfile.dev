@@ -1,1 +1,68 @@
+# =============================================================================
+# Dockerfile.dev — Portable x86_64 dev environment
+# ROS 2 Jazzy + Nav2 + MoveIt 2 + ros2_control + Zenoh
+# For writing and unit-testing Jetson-bound code on any laptop (Win/Mac/Linux,
+# GPU or no GPU). Deliberately does NOT include Isaac ROS's GPU-accelerated
+# perception packages — those need real Tegra hardware. This image is safe to
+# break; it's isolated from Dockerfile.basestation on purpose.
+# =============================================================================
 
+FROM ros:jazzy-ros-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROS_DISTRO=jazzy
+
+# -----------------------------------------------------------------------------
+# Dev tooling
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git curl wget vim nano \
+    python3-pip python3-venv \
+    ros-dev-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Nav2 / MoveIt 2 / ros2_control
+# (Same package set as the Jetson image, so code written here transfers with
+# minimal changes — this is the whole point of this image.)
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-navigation2 \
+    ros-jazzy-nav2-bringup \
+    ros-jazzy-moveit \
+    ros-jazzy-ros2-control \
+    ros-jazzy-ros2-controllers \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Zenoh RMW
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-rmw-zenoh-cpp \
+    && rm -rf /var/lib/apt/lists/*
+ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
+
+# -----------------------------------------------------------------------------
+# (Optional, later) Simulation tools go here once the sim environment is
+# picked — e.g. Gazebo packages, or an Isaac Sim client if you go that route.
+# Left out for now so this image builds fast and stays lean.
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Workspace
+# -----------------------------------------------------------------------------
+ENV ROS_WS=/workspaces/rover_ws
+RUN mkdir -p ${ROS_WS}/src
+WORKDIR ${ROS_WS}
+
+# Bind-mount your local rover_ws/src here at `docker run` time for active
+# development, rather than COPY-ing it in — you want live edits to show up
+# without rebuilding the image every time.
+
+# -----------------------------------------------------------------------------
+# Entrypoint
+# -----------------------------------------------------------------------------
+COPY ros_entrypoint.sh /
+RUN chmod +x /ros_entrypoint.sh
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]
