@@ -122,6 +122,8 @@ Isaac ROS is **Jetson-only** in our architecture because it relies on the NVIDIA
 
 Package-by-package validation for the team's **Orin + JetPack 7.2** configuration remains an open hardware-validation item. Isaac ROS components should be confirmed on the actual Jetson hardware before being treated as production-ready.
 
+(not too sure if we're gonna end up using this bc Orin + jetPack 7.2 is a relatively new and untested config)
+
 ---
 
 # Simulation
