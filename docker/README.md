@@ -21,6 +21,37 @@ docker run -it --rm -v $(pwd)/rover_ws:/workspaces/rover_ws rover-dev
 
 The `-v` bind mount maps the local `rover_ws` into the container so edits made outside the container are reflected inside it live.
 
+## Verifying the Setup
+
+Once you're in the container (`ros_entrypoint.sh` has already sourced `/opt/ros/jazzy/setup.bash` for you), run these to confirm the environment is actually ready before you start developing:
+
+```bash
+# ROS 2 is installed and on the right distro
+ros2 --version
+echo $ROS_DISTRO   # should print: jazzy
+
+# Zenoh RMW is active (not the default DDS implementation)
+echo $RMW_IMPLEMENTATION   # should print: rmw_zenoh_cpp
+
+# Nav2 / MoveIt 2 / ros2_control packages installed correctly
+ros2 pkg list | grep -E "nav2_bringup|moveit_ros|ros2_control"
+
+# Full environment sanity check
+ros2 doctor
+```
+
+Then confirm pub/sub actually works end-to-end. Open a second terminal into the same running container (`docker exec -it <container_id_or_name> bash`) and run one command in each:
+
+```bash
+# Terminal 1
+ros2 run demo_nodes_cpp talker
+
+# Terminal 2
+ros2 run demo_nodes_py listener
+```
+
+The listener should start printing `I heard: [Hello World: N]` messages from the talker. If it does, Zenoh discovery and ROS 2 communication are both working inside the container. `Ctrl+C` both to stop.
+
 ## Why `dev` and `jetson` Bind-Mount the Workspace
 
 `dockerfile.dev` and `dockerfile.jetson` both mount `rover_ws` from the host at `docker run` time instead of `COPY`-ing it into the image. The image only provides the OS, ROS 2 Jazzy, and the rest of the toolchain — the actual rover source lives outside the container and is attached live.
