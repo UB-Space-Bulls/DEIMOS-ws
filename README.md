@@ -26,9 +26,31 @@ ROS 2 provides the framework used to connect the rover's sensors, actuators, aut
 
 ### Zenoh
 
-**Zenoh** is used as the ROS 2 RMW/messaging layer between the base station and rover.
+**Zenoh** is used through `rmw_zenoh_cpp` as the ROS 2 RMW/messaging layer between the base station and rover.
 
 It provides the underlying transport for ROS 2 topics, services, and actions across the rover network.
+
+Zenoh deployment is an explicit part of the rover network architecture. The rover and base station will use a configured Zenoh router/client topology rather than relying on implicit discovery behavior. Router and endpoint configuration should be kept in version-controlled configuration files so the network can be reproduced consistently.
+
+A simplified topology is:
+
+```text
+Base Station ROS 2 Nodes
+        ↓
+   rmw_zenoh_cpp
+        ↓
+  Zenoh Router
+        ↓
+   Rover Network
+        ↓
+  Zenoh Router / Client
+        ↓
+   rmw_zenoh_cpp
+        ↓
+Rover ROS 2 Nodes
+```
+
+The final router topology may change as networking is tested on the rover, but it should remain deliberately configured.
 
 In general:
 
@@ -99,6 +121,8 @@ Motor Controller
 Physical Actuator
 ```
 
+In simulation, the hardware layer can instead be provided through `gz_ros2_control` so the same controller configuration and higher-level software can be exercised against Gazebo Harmonic.
+
 In general:
 
 > If software needs to command or receive feedback from an actuator, it should interface through ros2_control whenever practical.
@@ -107,9 +131,9 @@ In general:
 
 ### Isaac ROS
 
-**Isaac ROS** provides GPU-accelerated perception on the rover's NVIDIA Jetson computers.
+**Isaac ROS is an experimental component of the current Space Bulls stack.**
 
-Potential uses include:
+Space Bulls intends to use Isaac ROS only in the onboard Jetson environment for GPU-accelerated perception workloads such as:
 
 - Visual SLAM
 - Depth processing
@@ -118,11 +142,9 @@ Potential uses include:
 - Image-processing pipelines
 - Other GPU-accelerated perception workloads
 
-Isaac ROS is **Jetson-only** in our architecture because it relies on the NVIDIA Jetson/Tegra GPU platform.
+The team's **Orin + JetPack 7.2** configuration is relatively new and must be validated package-by-package on the actual Jetson hardware before Isaac ROS is treated as production-ready.
 
-Package-by-package validation for the team's **Orin + JetPack 7.2** configuration remains an open hardware-validation item. Isaac ROS components should be confirmed on the actual Jetson hardware before being treated as production-ready.
-
-(not too sure if we're gonna end up using this bc Orin + jetPack 7.2 is a relatively new and untested config)
+The rover architecture should therefore **not depend on Isaac ROS being available for core rover operation**. Isaac ROS should remain optional until the required packages have been validated and shown to be reliable on the team's hardware.
 
 ---
 
@@ -130,20 +152,20 @@ Package-by-package validation for the team's **Orin + JetPack 7.2** configuratio
 
 We use two simulation tools for different purposes.
 
-## Gazebo
+## Gazebo Harmonic
 
-**Gazebo is the team's primary simulation environment.**
+**Gazebo Harmonic is the team's primary simulation environment.**
 
-It is intended to be CPU-friendly and broadly available to developers for developing and testing:
+It is intended to be broadly available to developers for developing and testing:
 
 - Nav2
 - MoveIt 2
-- ros2_control
+- ros2_control through `gz_ros2_control`
 - Mission logic
 - Robot descriptions and transforms
 - General ROS 2 integration
 
-Gazebo should be the default simulator for normal rover software development and should not require NVIDIA GPU hardware.
+Gazebo Harmonic should be the default simulator for normal rover software development and should not require NVIDIA Jetson hardware.
 
 ---
 
@@ -169,11 +191,13 @@ The project uses three Docker images with intentionally different responsibiliti
 
 | Dockerfile | Architecture | Purpose |
 |---|---|---|
-| `Dockerfile.jetson` | ARM64 | Onboard rover environment; full runtime stack including Isaac ROS |
+| `Dockerfile.jetson` | ARM64 | Onboard rover runtime environment; Jetson-specific dependencies and experimentally validated Isaac ROS packages |
 | `Dockerfile.basestation` | x86_64 | Stable ground-control environment; protected from casual development changes |
-| `Dockerfile.dev` | x86_64 | Portable development environment for Jetson-bound code; safe to modify and break during development |
+| `Dockerfile.dev` | x86_64 | Portable development environment for Jetson-bound source code; safe to modify and break during development |
 
 The **development image is currently built**.
+
+Because the development and Jetson environments use different CPU architectures, source code and configuration should transfer between them, but compiled x86_64 build artifacts should not. Rover packages must be built for ARM64 inside the Jetson environment.
 
 For more detail about the Docker environments and what should transfer between them, see [`docker/README.md`](docker/README.md).
 
@@ -184,7 +208,8 @@ For more detail about the Docker environments and what should transfer between t
 | Task | Primary System |
 |---|---|
 | ROS 2 framework | ROS 2 Jazzy |
-| Rover ↔ base-station messaging | Zenoh RMW |
+| Rover ↔ base-station messaging | Zenoh / `rmw_zenoh_cpp` |
+| Zenoh network topology | Version-controlled Zenoh router/client configuration |
 | Autonomous driving | Nav2 |
 | Path planning | Nav2 |
 | Obstacle avoidance | Nav2 |
@@ -194,8 +219,9 @@ For more detail about the Docker environments and what should transfer between t
 | Motor commands | ros2_control |
 | Encoder / actuator feedback | ros2_control hardware interfaces |
 | Physical hardware integration | ros2_control / device-specific ROS 2 packages |
-| GPU-accelerated perception | Isaac ROS on Jetson |
-| General simulation | Gazebo |
+| GPU-accelerated perception | Isaac ROS on Jetson, experimental until validated |
+| General simulation | Gazebo Harmonic |
+| Simulated ros2_control hardware | `gz_ros2_control` |
 | Synthetic perception data | Isaac Sim, optional |
 | Operator controls | Base-station ROS 2 packages |
 | Software development and testing | Development Docker image |
@@ -208,16 +234,23 @@ For more detail about the Docker environments and what should transfer between t
                      Operator / Mission Control
                             Base Station
                                 │
-                              Zenoh
+                         rmw_zenoh_cpp
                                 │
-                                ▼
+                          Zenoh Router
+                                │
+                         Rover Network
+                                │
+                     Zenoh Router / Client
+                                │
+                         rmw_zenoh_cpp
+                                │
                        ROS 2 Jazzy Rover
                  ┌──────────────┴──────────────┐
                  │                             │
                  ▼                             ▼
            Perception                      Autonomy
            Isaac ROS                         Nav2
-          (Jetson only)                       │
+        (experimental)                        │
                  │                             │
                  └──────────────┬──────────────┘
                                 │
@@ -242,11 +275,14 @@ When adding software to the rover:
 - Keep hardware-specific code separated from higher-level autonomy and planning logic.
 - Use ros2_control as the primary abstraction between actuators and higher-level software.
 - Keep Jetson-specific dependencies isolated to the onboard environment.
-- Keep Isaac ROS out of environments that do not require Jetson GPU acceleration.
-- Use Gazebo as the default team-wide simulator.
+- Treat Isaac ROS as optional and experimental until the required packages are validated on Orin + JetPack 7.2.
+- Use Gazebo Harmonic as the default team-wide simulator.
+- Use `gz_ros2_control` to keep simulated control interfaces close to the real ros2_control architecture.
 - Treat Isaac Sim as an optional perception tool rather than a required dependency.
 - Keep ROS 2 packages focused on clearly defined responsibilities.
 - Design nodes and packages so individual systems can be tested independently.
+- Keep Zenoh router/client configuration version controlled and intentionally deployed.
+- Transfer source code and configuration between x86_64 development and ARM64 Jetson environments, then rebuild for the target architecture.
 - Use Docker environments to maintain consistent dependencies across team members and rover computers.
 
 ---
