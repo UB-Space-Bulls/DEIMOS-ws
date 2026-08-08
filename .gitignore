@@ -1,1 +1,70 @@
+# =========================
+# ROS 2 / Colcon
+# =========================
+build/
+install/
+log/
 
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# =========================
+# C / C++
+# =========================
+*.o
+*.so
+*.a
+*.out
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# =========================
+# ROS bags / recorded data
+# =========================
+*.bag
+*.db3
+*.mcap
+
+# =========================
+# Secrets / environment
+# =========================
+.env
+.env.*
+*.pem
+*.key
+
+# =========================
+# IDE / Editor
+# =========================
+.idea/
+
+# VS Code local settings
+.vscode/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Temporary files
+# =========================
+*.tmp
+*.swp
+*~
