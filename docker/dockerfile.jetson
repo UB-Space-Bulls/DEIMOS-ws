@@ -1,1 +1,94 @@
+# =============================================================================
+# Dockerfile.dev — Jetson (Orin) ARM64 dev environment
+# ROS 2 Jazzy + Isaac ROS 4.0 + Nav2 + MoveIt 2 + ros2_control + Zenoh
+# =============================================================================
+#
+# BASE IMAGE — VERIFY BEFORE BUILDING:
+# This should be the l4t-jetpack image matching your board's exact flashed
+# JetPack version. Confirm the tag exists on NGC before building:
+#   https://catalog.ngc.nvidia.com/orgs/nvidia/containers/l4t-jetpack
+# NGC's l4t-jetpack tags can lag a few weeks behind a Jetson Linux release,
+# so if r39.2 isn't published yet, check the NVIDIA Jetson forum announcement
+# thread for JetPack 7.2 for a status update, or use the closest available
+# r39.x tag and confirm compatibility with `jetson_release` on-device.
+ARG BASE_IMAGE=nvcr.io/nvidia/l4t-jetpack:r39.2.0
+FROM ${BASE_IMAGE}
 
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=en_US.UTF-8
+ENV ROS_DISTRO=jazzy
+
+# -----------------------------------------------------------------------------
+# Base system + locale
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    locales curl gnupg2 lsb-release software-properties-common \
+    build-essential git python3-pip python3-venv \
+    && locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# ROS 2 Jazzy (apt install — Jetson Linux 39.2 ships Ubuntu 24.04/noble,
+# which is Jazzy's tier-1 platform)
+# -----------------------------------------------------------------------------
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+    -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+    | tee /etc/apt/sources.list.d/ros2.list > /dev/null \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-ros-base \
+    ros-dev-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Isaac ROS apt repo (release-4, noble) — confirm package names against
+# https://nvidia-isaac-ros.github.io before pinning your final list.
+# NOTE: as of this writing, Isaac ROS 4.0 was validated primarily for
+# Jetson Thor. JetPack 7.2 adds Orin *OS-level* support, but re-check the
+# Isaac ROS supported-platforms page for Orin package-level validation
+# before relying on any single GPU-accelerated package (nvblox, VSLAM, etc.)
+# in competition-critical code paths.
+RUN mkdir -p /usr/share/keyrings \
+    && curl -fsSL https://isaac.download.nvidia.com/isaac-ros/repos.key \
+    | gpg --dearmor -o /usr/share/keyrings/nvidia-isaac-ros.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/nvidia-isaac-ros.gpg] https://isaac.download.nvidia.com/isaac-ros/release-4 noble main" \
+    | tee /etc/apt/sources.list.d/nvidia-isaac-ros.list > /dev/null \
+    && apt-get update
+
+# -----------------------------------------------------------------------------
+# Nav2 / MoveIt 2 / ros2_control
+# -----------------------------------------------------------------------------
+RUN apt-get install -y --no-install-recommends \
+    ros-jazzy-navigation2 \
+    ros-jazzy-nav2-bringup \
+    ros-jazzy-moveit \
+    ros-jazzy-ros2-control \
+    ros-jazzy-ros2-controllers \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Zenoh RMW
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-rmw-zenoh-cpp \
+    && rm -rf /var/lib/apt/lists/*
+ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
+
+# -----------------------------------------------------------------------------
+# Workspace
+# -----------------------------------------------------------------------------
+ENV ROS_WS=/workspaces/rover_ws
+RUN mkdir -p ${ROS_WS}/src
+WORKDIR ${ROS_WS}
+
+# TODO: COPY your rover_ws/src packages in here once this is stable,
+# or bind-mount it at `docker run` time for active development.
+
+# -----------------------------------------------------------------------------
+# Entrypoint
+# -----------------------------------------------------------------------------
+COPY ros_entrypoint.sh /
+RUN chmod +x /ros_entrypoint.sh
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]
