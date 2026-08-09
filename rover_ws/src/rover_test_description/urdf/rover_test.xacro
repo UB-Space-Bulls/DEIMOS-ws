@@ -1,0 +1,299 @@
+<?xml version="1.0" ?>
+<robot name="rover_test" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<!--
+  Preliminary/dev-only chassis model exported from CAD (SolidWorks-to-URDF
+  exporter). Meshes and swerve-module topology (base_link -> steer link ->
+  wheel link, x4 corners) came from the exporter as-is; link/joint names,
+  the ros2_control block, and the Gazebo plugin were rewritten by hand to
+  match this project's Gazebo Harmonic + gz_ros2_control stack and the
+  rear_left/front_left/rear_right/front_right naming convention used in
+  rover_description's config/rover_controllers.yaml and
+  rover_swerve_controller/swerve_kinematics_node.py.
+-->
+
+<xacro:include filename="$(find rover_test_description)/urdf/materials.xacro" />
+<xacro:include filename="$(find rover_test_description)/urdf/rover_test.gazebo" />
+
+<link name="base_link">
+  <inertial>
+    <origin xyz="1.7662172446492366e-08 0.04237215152825712 0.09216107589120397" rpy="0 0 0"/>
+    <mass value="595.1849542563896"/>
+    <inertia ixx="19.500193" iyy="39.83973" izz="55.970633" ixy="1e-06" iyz="-0.807843" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="front_left_wheel_link">
+  <inertial>
+    <origin xyz="0.0507999999999999 -1.1102230246251565e-16 5.551115123125783e-17" rpy="0 0 0"/>
+    <mass value="25.864295489856012"/>
+    <inertia ixx="0.133493" iyy="0.088995" izz="0.088995" ixy="-0.0" iyz="0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.3556 0.3175 0.1905" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/wheel1_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.3556 0.3175 0.1905" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/wheel1_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="rear_left_wheel_link">
+  <inertial>
+    <origin xyz="0.050799999999999956 1.1102230246251565e-16 3.885780586188048e-16" rpy="0 0 0"/>
+    <mass value="25.864295489856012"/>
+    <inertia ixx="0.133493" iyy="0.088995" izz="0.088995" ixy="0.0" iyz="0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.3556 -0.2921 0.1905" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/wheel3_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.3556 -0.2921 0.1905" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/wheel3_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="front_right_wheel_link">
+  <inertial>
+    <origin xyz="-0.050799999999999845 -3.6637359812630166e-15 -2.7755575615628914e-16" rpy="0 0 0"/>
+    <mass value="25.864295489856012"/>
+    <inertia ixx="0.133493" iyy="0.088995" izz="0.088995" ixy="0.0" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.3556 0.3175 0.1905" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/wheel2_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.3556 0.3175 0.1905" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/wheel2_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="rear_right_wheel_link">
+  <inertial>
+    <origin xyz="-0.05080000000000029 -3.7192471324942744e-15 1.6653345369377348e-16" rpy="0 0 0"/>
+    <mass value="25.864295489856012"/>
+    <inertia ixx="0.133493" iyy="0.088995" izz="0.088995" ixy="0.0" iyz="0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.3556 -0.2921 0.1905" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/wheel4_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.3556 -0.2921 0.1905" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/wheel4_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="front_left_steer_link">
+  <inertial>
+    <origin xyz="-0.004588209054589121 -1.1102230246251565e-16 -0.0951512261261479" rpy="0 0 0"/>
+    <mass value="11.71442300300121"/>
+    <inertia ixx="0.072711" iyy="0.074344" izz="0.018661" ixy="0.0" iyz="-0.0" ixz="-0.013033"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.3556 0.3175 -0.0254" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/mount1_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.3556 0.3175 -0.0254" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/mount1_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="front_right_steer_link">
+  <inertial>
+    <origin xyz="0.00458820905458901 5.551115123125783e-17 -0.09515122612614813" rpy="0 0 0"/>
+    <mass value="11.714423003001206"/>
+    <inertia ixx="0.072711" iyy="0.074344" izz="0.018661" ixy="0.0" iyz="0.0" ixz="0.013033"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.3556 0.3175 -0.0254" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/mount2_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.3556 0.3175 -0.0254" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/mount2_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="rear_left_steer_link">
+  <inertial>
+    <origin xyz="-0.00458820905458901 1.1102230246251565e-16 -0.09515122612614782" rpy="0 0 0"/>
+    <mass value="11.71442300300121"/>
+    <inertia ixx="0.072711" iyy="0.074344" izz="0.018661" ixy="0.0" iyz="0.0" ixz="-0.013033"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.3556 -0.2921 -0.0254" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/mount3_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.3556 -0.2921 -0.0254" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/mount3_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="rear_right_steer_link">
+  <inertial>
+    <origin xyz="0.004588209054588566 -5.551115123125783e-17 -0.09515122612614793" rpy="0 0 0"/>
+    <mass value="11.71442300300121"/>
+    <inertia ixx="0.072711" iyy="0.074344" izz="0.018661" ixy="0.0" iyz="0.0" ixz="0.013033"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.3556 -0.2921 -0.0254" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/mount4_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.3556 -0.2921 -0.0254" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find rover_test_description)/meshes/mount4_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<joint name="front_left_wheel_joint" type="continuous">
+  <origin xyz="0.0 0.0 -0.2159" rpy="0 0 0"/>
+  <parent link="front_left_steer_link"/>
+  <child link="front_left_wheel_link"/>
+  <axis xyz="-1.0 -0.0 -0.0"/>
+</joint>
+
+<joint name="rear_left_wheel_joint" type="continuous">
+  <origin xyz="0.0 0.0 -0.2159" rpy="0 0 0"/>
+  <parent link="rear_left_steer_link"/>
+  <child link="rear_left_wheel_link"/>
+  <axis xyz="-1.0 0.0 0.0"/>
+</joint>
+
+<joint name="front_right_wheel_joint" type="continuous">
+  <origin xyz="0.0 0.0 -0.2159" rpy="0 0 0"/>
+  <parent link="front_right_steer_link"/>
+  <child link="front_right_wheel_link"/>
+  <axis xyz="1.0 -0.0 0.0"/>
+</joint>
+
+<joint name="rear_right_wheel_joint" type="continuous">
+  <origin xyz="0.0 0.0 -0.2159" rpy="0 0 0"/>
+  <parent link="rear_right_steer_link"/>
+  <child link="rear_right_wheel_link"/>
+  <axis xyz="1.0 -0.0 -0.0"/>
+</joint>
+
+<joint name="front_left_steer_joint" type="continuous">
+  <origin xyz="0.3556 -0.3175 0.0254" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="front_left_steer_link"/>
+  <axis xyz="0.0 0.0 1.0"/>
+</joint>
+
+<joint name="front_right_steer_joint" type="continuous">
+  <origin xyz="-0.3556 -0.3175 0.0254" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="front_right_steer_link"/>
+  <axis xyz="0.0 0.0 1.0"/>
+</joint>
+
+<joint name="rear_left_steer_joint" type="continuous">
+  <origin xyz="0.3556 0.2921 0.0254" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="rear_left_steer_link"/>
+  <axis xyz="0.0 0.0 1.0"/>
+</joint>
+
+<joint name="rear_right_steer_joint" type="continuous">
+  <origin xyz="-0.3556 0.2921 0.0254" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="rear_right_steer_link"/>
+  <axis xyz="0.0 0.0 1.0"/>
+</joint>
+
+<xacro:macro name="steer_ros2_control" params="prefix">
+  <joint name="${prefix}_steer_joint">
+    <command_interface name="position"/>
+    <state_interface name="position"/>
+    <state_interface name="velocity"/>
+  </joint>
+</xacro:macro>
+
+<xacro:macro name="wheel_ros2_control" params="prefix">
+  <joint name="${prefix}_wheel_joint">
+    <command_interface name="velocity"/>
+    <state_interface name="velocity"/>
+    <state_interface name="position"/>
+  </joint>
+</xacro:macro>
+
+<ros2_control name="gz_ros2_control_system" type="system">
+  <hardware>
+    <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+  </hardware>
+  <xacro:steer_ros2_control prefix="rear_left"/>
+  <xacro:wheel_ros2_control prefix="rear_left"/>
+  <xacro:steer_ros2_control prefix="front_left"/>
+  <xacro:wheel_ros2_control prefix="front_left"/>
+  <xacro:steer_ros2_control prefix="rear_right"/>
+  <xacro:wheel_ros2_control prefix="rear_right"/>
+  <xacro:steer_ros2_control prefix="front_right"/>
+  <xacro:wheel_ros2_control prefix="front_right"/>
+</ros2_control>
+
+<gazebo>
+  <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+    <parameters>$(find rover_test_description)/config/rover_test_controllers.yaml</parameters>
+  </plugin>
+</gazebo>
+
+</robot>
