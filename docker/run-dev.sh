@@ -23,5 +23,6 @@ docker run -it --rm \
   -e DISPLAY="$DISPLAY" \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v "${REPO_ROOT}/rover_ws:/workspaces/rover_ws" \
+  --device /dev/dri:/dev/dri \
   --user "$(id -u):$(id -g)" \
   rover-dev "$@"

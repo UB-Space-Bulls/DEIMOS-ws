@@ -17,7 +17,12 @@ fi
 # still an explicit, undecided design choice (see CLAUDE.md's Zenoh
 # section), so this only runs when ZENOH_ROUTER_AUTOSTART=1 is set.
 if [ "${RMW_IMPLEMENTATION}" = "rmw_zenoh_cpp" ] && [ "${ZENOH_ROUTER_AUTOSTART:-0}" = "1" ]; then
-    ros2 run rmw_zenoh_cpp rmw_zenohd > /tmp/zenohd.log 2>&1 &
+    # setsid detaches the router into its own session/process group. Without
+    # it, this plain `&` background job shares the entrypoint script's (and
+    # after `exec`, the interactive shell's) process group -- so a Ctrl+C at
+    # the terminal sends SIGINT to the whole foreground group and silently
+    # kills the router along with whatever you meant to interrupt.
+    setsid ros2 run rmw_zenoh_cpp rmw_zenohd > /tmp/zenohd.log 2>&1 < /dev/null &
     echo "[ros_entrypoint] Zenoh router auto-started in background (log: /tmp/zenohd.log)"
 fi
 
