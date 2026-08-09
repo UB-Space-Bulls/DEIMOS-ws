@@ -73,6 +73,16 @@ WORKDIR ${ROS_WS}
 # development, rather than COPY-ing it in — you want live edits to show up
 # without rebuilding the image every time.
 
+# ros_entrypoint.sh only sources ROS for the container's first process, so a
+# second terminal opened via `docker exec -it <container> bash` skips it and
+# gets a bare shell (no `ros2` command, no workspace packages). Sourcing from
+# /etc/bash.bashrc instead covers every interactive bash shell in the
+# container, exec'd or not -- this is in addition to, not instead of,
+# ros_entrypoint.sh, which still handles the non-interactive-command case
+# (e.g. `docker run rover-dev ros2 launch ...`) that never reads bashrc at all.
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc && \
+    echo "[ -f ${ROS_WS}/install/setup.bash ] && source ${ROS_WS}/install/setup.bash" >> /etc/bash.bashrc
+
 # -----------------------------------------------------------------------------
 # Entrypoint
 # -----------------------------------------------------------------------------
