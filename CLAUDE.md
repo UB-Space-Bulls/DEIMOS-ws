@@ -8,6 +8,20 @@ This file summarizes the software architecture and decisions for the URC
 (University Rover Challenge) rover's dev environment. Read this before making
 changes to any Dockerfile or ROS 2 package structure.
 
+## Communication style
+
+Most people working in this repo have limited ROS 2 experience — don't
+assume familiarity with ROS jargon (nodes, topics, `ros2_control`, `colcon`,
+TF, RMW, etc.). Explain a term the first time it comes up rather than
+assuming it's known. Don't strip out real technical content to "simplify"
+it though — keep the precision, just make it land for someone who hasn't
+used ROS before. For anything longer than a couple sentences, follow the
+full explanation with a short **TL;DR** in plain language.
+
+Also work in some Gen Z slang naturally where it fits — no cap, rizz,
+crashout, huzz, or similar. Doesn't need to be forced into every sentence,
+just keep things from reading completely dry.
+
 ## Software stack
 
 - **ROS 2 Jazzy** across the entire system — Jetson, base station, and dev
@@ -20,6 +34,24 @@ changes to any Dockerfile or ROS 2 package structure.
 - **ros2_control** for the hardware abstraction layer driving actuators.
 - **Isaac ROS** for GPU-accelerated perception (VSLAM, nvblox, object
   detection, etc.) — Jetson-only, since it needs the Tegra GPU.
+
+## ROS 2 packages in this repo (`rover_ws/src/`)
+
+- **`rover_description`** — the real chassis package: placeholder
+  box/cylinder swerve geometry, `ros2_control` wiring, Gazebo Harmonic
+  world, and controller config. This is what Nav2/sim/mission work should
+  build against.
+- **`rover_swerve_controller`** — the custom inverse-kinematics node
+  (`swerve_kinematics_node.py`) that converts `/cmd_vel` into per-module
+  steer-angle + wheel-speed commands, since no stock `ros2_controllers`
+  swerve plugin exists.
+- **`rover_test_description`** — preliminary/dev-only package holding a
+  CAD-derived (SolidWorks-to-URDF export) version of the chassis: real
+  meshes and swerve topology, rewired for Gazebo Harmonic/`gz_ros2_control`
+  and renamed to the `front_left`/`front_right`/`rear_left`/`rear_right`
+  convention. Kept separate from `rover_description` — its geometry hasn't
+  been folded into the real package yet. Launch `display.launch.py` (RViz)
+  or `gazebo.launch.py` (Gazebo) to eyeball the CAD model.
 
 ## Hardware
 
@@ -99,6 +131,32 @@ match the case exactly in build commands on Linux.
 All three share `ros_entrypoint.sh`, which sources `/opt/ros/jazzy/setup.bash`
 on every container start (this can't be a static `ENV` var — ROS's env setup
 does more than set variables, so it has to actually execute each time).
+
+### Common footguns when building/running
+
+- **Always build/run from the repo root**, not from inside `docker/`. All
+  three Dockerfiles `COPY docker/ros_entrypoint.sh /`, which only resolves
+  correctly when the build context is the repo root — i.e.
+  `docker build -f docker/dockerfile.<target> -t <tag> .` run from the top
+  of the repo. Building from inside `docker/` breaks the `COPY` because the
+  context shifts. The same applies to `-v $(pwd)/rover_ws:...` in
+  `docker run` — `pwd` has to actually be the repo root or the mount points
+  at the wrong (usually nonexistent) directory.
+- **Host vs. container UID mismatch** — if `colcon build` runs inside the
+  container as root (the default) against the bind-mounted `rover_ws`, the
+  resulting `build/`, `install/`, `log/` directories come out root-owned on
+  the host, and a later host-side `colcon build` will fail with a
+  `PermissionError`. Either build consistently in one place (always
+  container, or always host), or pass `--user $(id -u):$(id -g)` to
+  `docker run` so output ownership matches the host user.
+- **`dockerfile.dev`'s apt-get list has to be kept in sync with every
+  package's `package.xml` by hand** — nothing here runs `rosdep install`,
+  so adding a new `exec_depend`/`test_depend` to a package (e.g.
+  `ament_lint_auto`, `joint_state_publisher`, `rviz2`) doesn't
+  automatically get it installed in the image. When you add a new
+  workspace dependency, double-check it's also in `dockerfile.dev`'s
+  apt-get list, or the container build/launch will fail even though the
+  host might already have it installed separately.
 
 ### What transfers cleanly between `dockerfile.dev` and `dockerfile.jetson`
 Portable (little to no change): Nav2 costmap/planner configs, MoveIt 2

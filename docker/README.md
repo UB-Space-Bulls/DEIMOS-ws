@@ -12,14 +12,66 @@ The **development image is currently built**. The base-station and Jetson images
 
 ## Building and Running the Development Image
 
-Run from the repo root:
+**Startup commands** — this is the normal day-to-day flow, run from the repo root:
 
 ```bash
+# One-time, or whenever dockerfile.dev itself changes (new apt packages, etc.)
 docker build -f docker/dockerfile.dev -t rover-dev .
-docker run -it --rm -v $(pwd)/rover_ws:/workspaces/rover_ws rover-dev
+
+# Every time you want a dev container (rebuilding the image is not required)
+./docker/run-dev.sh
 ```
 
-The `-v` bind mount maps the local `rover_ws` into the container so edits made outside the container are reflected inside it live.
+`run-dev.sh` is a wrapper around `docker run` that also handles two things
+you'd otherwise have to remember by hand:
+- `xhost +local:docker` — lets containers draw windows (Gazebo, RViz) on
+  your screen. Safe to re-run; it's idempotent.
+- `--user $(id -u):$(id -g)` — runs the container as your host user instead
+  of root, so files `colcon build` creates in the bind-mounted `rover_ws`
+  come out owned by you, not root (see the "Common footguns" note in the
+  top-level `CLAUDE.md` for what happens if this gets skipped).
+
+Once you're in the container:
+
+```bash
+colcon build --packages-select <package_name> --symlink-install
+source install/setup.bash
+ros2 launch <package_name> <launch_file>.py
+```
+
+`--symlink-install` means most future edits to launch/config/URDF files show
+up on the next `ros2 launch` without a rebuild — you only need to rebuild
+when you add a brand-new file, not for editing an existing one.
+
+Need a second terminal into the same running container (e.g. to publish a
+topic while Gazebo's open in the first)? `run-dev.sh` names the container
+`rover-dev-container`, so:
+
+```bash
+docker exec -it rover-dev-container bash
+```
+
+That new shell auto-sources ROS and the workspace on its own — no manual
+`source` needed there either.
+
+<details>
+<summary>What `run-dev.sh` runs under the hood, if you need to customize it</summary>
+
+```bash
+xhost +local:docker
+docker run -it --rm \
+  --net=host \
+  --name rover-dev-container \
+  -e DISPLAY=$DISPLAY \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v $(pwd)/rover_ws:/workspaces/rover_ws \
+  --user $(id -u):$(id -g) \
+  rover-dev
+```
+
+The `-v .../rover_ws` bind mount is what maps your local `rover_ws` into the
+container so edits made outside the container are reflected inside it live.
+</details>
 
 ## Verifying the Setup
 
@@ -51,6 +103,34 @@ ros2 run demo_nodes_py listener
 ```
 
 The listener should start printing `I heard: [Hello World: N]` messages from the talker. If it does, Zenoh discovery and ROS 2 communication are both working inside the container. `Ctrl+C` both to stop.
+
+## Building on the Bare Host (No Docker)
+
+You don't have to use Docker at all for day-to-day dev — installing ROS 2
+Jazzy directly and running `colcon build` on your host works too. The one
+thing Docker gives you for free that the bare host doesn't is
+`ros_entrypoint.sh`: it automatically sources `/opt/ros/jazzy/setup.bash`
+and `rover_ws/install/setup.bash` every time a container starts, so you
+never think about it inside Docker. On the bare host, every new terminal
+is a fresh shell that hasn't run either of those, so `ros2` commands and
+your built packages won't be found until you source them yourself.
+
+One-time fix — add both lines to your own `~/.bashrc` so every new
+terminal sources them automatically from then on:
+
+```bash
+echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
+echo '[ -f ~/space-bulls/rover_ws/install/setup.bash ] && source ~/space-bulls/rover_ws/install/setup.bash' >> ~/.bashrc
+```
+
+(Adjust the `~/space-bulls` path if your clone lives somewhere else. The
+`[ -f ... ] &&` guard just skips the second line quietly if you haven't
+built the workspace yet, instead of erroring on every new terminal.)
+
+This is a per-machine, one-time setup step — it can't be committed to the
+repo, since `~/.bashrc` lives outside git in each person's home directory.
+Every teammate building on the bare host needs to run this once for
+themselves.
 
 ## Why `dev` and `jetson` Bind-Mount the Workspace
 
