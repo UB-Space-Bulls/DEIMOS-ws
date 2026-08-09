@@ -46,6 +46,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-rmw-zenoh-cpp \
     && rm -rf /var/lib/apt/lists/*
 ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
+# Safe here because this image is a single self-contained dev machine, not
+# part of the real base-station <-> rover network -- see ros_entrypoint.sh.
+ENV ZENOH_ROUTER_AUTOSTART=1
 
 # -----------------------------------------------------------------------------
 # Simulation — Gazebo Harmonic
