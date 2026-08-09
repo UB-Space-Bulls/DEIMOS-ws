@@ -48,10 +48,9 @@ just keep things from reading completely dry.
   placeholder it replaced was provisional. (There used to be a separate
   `rover_test_description` package for validating this CAD geometry before
   it was folded in here — that's done now, so it no longer exists.)
-  `rover_swerve_controller/swerve_kinematics_node.py`'s hardcoded wheel
-  radius and module positions still reflect the old placeholder chassis,
-  not this one — see the TODO in that file before trusting `/cmd_vel`-driven
-  turning against the real geometry.
+  `rover_swerve_controller/swerve_kinematics_node.py`'s wheel radius and
+  module positions are derived from this geometry (mesh bounding box and
+  joint origins) — re-derive them again if the chassis geometry changes.
 - **`rover_swerve_controller`** — the custom inverse-kinematics node
   (`swerve_kinematics_node.py`) that converts `/cmd_vel` into per-module
   steer-angle + wheel-speed commands, since no stock `ros2_controllers`

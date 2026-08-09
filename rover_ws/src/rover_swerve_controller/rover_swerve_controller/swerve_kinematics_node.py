@@ -9,28 +9,25 @@ from std_msgs.msg import Float64MultiArray
 # rover_description/config/rover_controllers.yaml.
 MODULES = ("front_left", "front_right", "rear_left", "rear_right")
 
-# TODO: these still reflect the old box/cylinder placeholder chassis, not
-# the CAD-derived geometry now in rover_description/urdf/rover.urdf.xacro.
-# That model's actual per-corner steer_joint origins (relative to base_link)
-# are asymmetric front-to-back and don't reduce to a single WHEEL_BASE/
-# WHEEL_SEPARATION pair the way this placeholder math assumes:
-#   front_left:  x= 0.3556  y=-0.3175      rear_left:  x= 0.3556  y= 0.2921
-#   front_right: x=-0.3556  y=-0.3175      rear_right: x=-0.3556  y= 0.2921
-# Note the x/y pairing there doesn't match this file's "x: forward, y: left"
-# convention either -- left/right differ in x and front/rear differ in y,
-# the opposite of what you'd expect, so re-derive this from the actual
-# module frames (not just copy the numbers above) before trusting
-# /cmd_vel-driven turning against the real CAD model. Wheel radius likewise
-# needs pulling from the real wheel mesh, not the 0.15 placeholder below.
-WHEEL_BASE = 0.4
-WHEEL_SEPARATION = 0.5
-WHEEL_RADIUS = 0.15
+# Derived from the CAD-based rover_description/urdf/rover.urdf.xacro, not
+# from a symmetric WHEEL_BASE/WHEEL_SEPARATION pair -- the real chassis is
+# NOT symmetric front-to-back (front modules sit 0.3175m from center, rear
+# modules sit 0.2921m from center). Values below are each *_steer_joint's
+# <origin> in rover.urdf.xacro, converted from that URDF/base_link frame
+# (where +x = left, -y = front -- swapped and sign-flipped from this file's
+# own "x: forward, y: left" convention) into (forward_offset, left_offset).
+# Re-derive these from the URDF again if the chassis geometry changes.
 MODULE_POSITIONS = {
-    "front_left": (WHEEL_BASE / 2, WHEEL_SEPARATION / 2),
-    "front_right": (WHEEL_BASE / 2, -WHEEL_SEPARATION / 2),
-    "rear_left": (-WHEEL_BASE / 2, WHEEL_SEPARATION / 2),
-    "rear_right": (-WHEEL_BASE / 2, -WHEEL_SEPARATION / 2),
+    "front_left": (0.3175, 0.3556),
+    "front_right": (0.3175, -0.3556),
+    "rear_left": (-0.2921, 0.3556),
+    "rear_right": (-0.2921, -0.3556),
 }
+
+# Measured directly off rover_description/meshes/wheel1_1.stl's bounding box
+# (diameter ~203.2mm across the two axes perpendicular to the rolling axis)
+# -- i.e. an 8in-diameter wheel, not the 0.15m (300mm-diameter) placeholder.
+WHEEL_RADIUS = 0.1016
 
 # Below this module speed, hold the last commanded steer angle instead of
 # snapping to atan2(0, 0) == 0 -- avoids the wheels jittering back to
