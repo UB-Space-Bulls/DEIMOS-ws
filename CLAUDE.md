@@ -37,21 +37,25 @@ just keep things from reading completely dry.
 
 ## ROS 2 packages in this repo (`rover_ws/src/`)
 
-- **`rover_description`** — the real chassis package: placeholder
-  box/cylinder swerve geometry, `ros2_control` wiring, Gazebo Harmonic
-  world, and controller config. This is what Nav2/sim/mission work should
-  build against.
+- **`rover_description`** — the real chassis package: CAD-derived
+  (SolidWorks-to-URDF export) swerve geometry, `ros2_control` wiring,
+  Gazebo Harmonic world, and controller config. This is what Nav2/sim/
+  mission work should build against. Launch `display.launch.py` (RViz) or
+  `gazebo.launch.py` (Gazebo) to see the model. **The CAD geometry itself
+  is still an early/interim export, not the finalized rover design** —
+  treat every mesh, mass, and joint origin here as provisional until it
+  comes from released-for-manufacture CAD, the same way the box/cylinder
+  placeholder it replaced was provisional. (There used to be a separate
+  `rover_test_description` package for validating this CAD geometry before
+  it was folded in here — that's done now, so it no longer exists.)
+  `rover_swerve_controller/swerve_kinematics_node.py`'s hardcoded wheel
+  radius and module positions still reflect the old placeholder chassis,
+  not this one — see the TODO in that file before trusting `/cmd_vel`-driven
+  turning against the real geometry.
 - **`rover_swerve_controller`** — the custom inverse-kinematics node
   (`swerve_kinematics_node.py`) that converts `/cmd_vel` into per-module
   steer-angle + wheel-speed commands, since no stock `ros2_controllers`
   swerve plugin exists.
-- **`rover_test_description`** — preliminary/dev-only package holding a
-  CAD-derived (SolidWorks-to-URDF export) version of the chassis: real
-  meshes and swerve topology, rewired for Gazebo Harmonic/`gz_ros2_control`
-  and renamed to the `front_left`/`front_right`/`rear_left`/`rear_right`
-  convention. Kept separate from `rover_description` — its geometry hasn't
-  been folded into the real package yet. Launch `display.launch.py` (RViz)
-  or `gazebo.launch.py` (Gazebo) to eyeball the CAD model.
 
 ## Hardware
 

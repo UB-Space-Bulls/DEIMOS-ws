@@ -9,8 +9,19 @@ from std_msgs.msg import Float64MultiArray
 # rover_description/config/rover_controllers.yaml.
 MODULES = ("front_left", "front_right", "rear_left", "rear_right")
 
-# Module positions relative to base_link (x: forward, y: left), matching the
-# x_reflect/y_reflect layout in rover_description/urdf/rover.urdf.xacro.
+# TODO: these still reflect the old box/cylinder placeholder chassis, not
+# the CAD-derived geometry now in rover_description/urdf/rover.urdf.xacro.
+# That model's actual per-corner steer_joint origins (relative to base_link)
+# are asymmetric front-to-back and don't reduce to a single WHEEL_BASE/
+# WHEEL_SEPARATION pair the way this placeholder math assumes:
+#   front_left:  x= 0.3556  y=-0.3175      rear_left:  x= 0.3556  y= 0.2921
+#   front_right: x=-0.3556  y=-0.3175      rear_right: x=-0.3556  y= 0.2921
+# Note the x/y pairing there doesn't match this file's "x: forward, y: left"
+# convention either -- left/right differ in x and front/rear differ in y,
+# the opposite of what you'd expect, so re-derive this from the actual
+# module frames (not just copy the numbers above) before trusting
+# /cmd_vel-driven turning against the real CAD model. Wheel radius likewise
+# needs pulling from the real wheel mesh, not the 0.15 placeholder below.
 WHEEL_BASE = 0.4
 WHEEL_SEPARATION = 0.5
 WHEEL_RADIUS = 0.15

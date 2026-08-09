@@ -1,5 +1,5 @@
 <?xml version="1.0" ?>
-<robot name="rover_test" xmlns:xacro="http://www.ros.org/wiki/xacro" >
+<robot name="rover" xmlns:xacro="http://www.ros.org/wiki/xacro" >
 
 <xacro:property name="body_color" value="Gazebo/Silver" />
 
@@ -26,9 +26,9 @@
   </gazebo>
 </xacro:macro>
 
-<xacro:module_surface prefix="rear_left"/>
 <xacro:module_surface prefix="front_left"/>
-<xacro:module_surface prefix="rear_right"/>
 <xacro:module_surface prefix="front_right"/>
+<xacro:module_surface prefix="rear_left"/>
+<xacro:module_surface prefix="rear_right"/>
 
 </robot>

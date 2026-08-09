@@ -4,7 +4,7 @@ project(rover_description)
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY urdf launch worlds config
+  DIRECTORY urdf launch worlds config meshes
   DESTINATION share/${PROJECT_NAME}
 )
 

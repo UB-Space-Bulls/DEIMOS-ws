@@ -6,6 +6,7 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -15,7 +16,16 @@ def generate_launch_description():
     xacro_file = PathJoinSubstitution([pkg_share, "urdf", "rover.urdf.xacro"])
     world_file = PathJoinSubstitution([pkg_share, "worlds", "rover_world.sdf"])
 
-    robot_description = {"robot_description": Command(["xacro ", xacro_file])}
+    # ParameterValue(..., value_type=str) is required here -- without it,
+    # launch_ros tries to auto-detect the parameter type by YAML-parsing the
+    # Command substitution's output, and a URDF/XML string isn't valid YAML
+    # (colons like `xmlns:xacro=` break the parse), which fails the launch
+    # before robot_state_publisher ever starts.
+    robot_description = {
+        "robot_description": ParameterValue(
+            Command(["xacro ", xacro_file]), value_type=str
+        )
+    }
 
     gz_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
