@@ -2,7 +2,7 @@
 
 This directory contains the Docker environments used to build, test, and run Space Bulls rover software.
 
-We maintain three primary images:
+We maintain three primary images, so everyone builds, tests, and runs software on the same environment regardless of host OS:
 
 - **`dockerfile.dev`** — x86_64 development environment for Jetson-bound source code. This is the environment team members should normally use while writing, building, testing, and simulating software. It is intentionally safe to modify and break during development.
 - **`dockerfile.basestation`** — x86_64 base-station environment for stable ground-control software. This image should remain comparatively stable and should be protected from casual development changes.
@@ -21,6 +21,8 @@ docker build -f docker/dockerfile.dev -t rover-dev .
 # Every time you want a dev container (rebuilding the image is not required)
 ./docker/run-dev.sh
 ```
+
+> **Important (Windows):** WSL2 is required for GUI passthrough (Gazebo, RViz windows) — native Windows has no X11 server for the container to draw to. Headless work (`colcon build`, running nodes, etc.) doesn't need it.
 
 `run-dev.sh` is a wrapper around `docker run` that also handles two things
 you'd otherwise have to remember by hand:
