@@ -36,11 +36,17 @@ def generate_launch_description():
         launch_arguments={"gz_args": [world_file, " -r"]}.items(),
     )
 
+    # use_sim_time is essential here: without it robot_state_publisher stamps
+    # TF with wall-clock while everything from Gazebo (the /odom message, the
+    # odom->base_link transform, sensor data) is stamped with sim time off
+    # /clock. The mismatch shows up as tf2 extrapolation errors the moment
+    # anything tries to chain base_link->lidar_link with odom->base_link, and
+    # it silently breaks slam_toolbox later.
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
         output="screen",
-        parameters=[robot_description],
+        parameters=[robot_description, {"use_sim_time": True}],
     )
 
     spawn_robot = Node(
@@ -56,7 +62,15 @@ def generate_launch_description():
         arguments=[
             "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
             "/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan",
+            # Ground-truth odometry + the odom->base_link transform, both from
+            # the OdometryPublisher plugin in rover.urdf.xacro. '[' means
+            # gz -> ros only, so the bridge can never publish back into the sim
+            # or inject a loop into /tf. The Pose_V on /odom_tf is remapped
+            # onto /tf below so the TF tree gets its odom->base_link edge.
+            "/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry",
+            "/odom_tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V",
         ],
+        remappings=[("/odom_tf", "/tf")],
         output="screen",
     )
 

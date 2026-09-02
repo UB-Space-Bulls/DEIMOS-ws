@@ -2,8 +2,8 @@
 <robot name="rover" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <!--
-    Chassis geometry (base_link + 4x swerve module meshes below) comes from
-    an early CAD export (SolidWorks-to-URDF), not the finalized rover
+    Chassis geometry (chassis_link + 4x swerve module meshes below) comes
+    from an early CAD export (SolidWorks-to-URDF), not the finalized rover
     design — expect these meshes, masses, and joint origins to change again
     as the real chassis design is finished. This replaced the box/cylinder
     placeholder that used to live here (see git history), which was step
@@ -25,19 +25,48 @@
     (see config/rover_controllers.yaml), fed by a custom inverse-kinematics
     node in the rover_swerve_controller package that converts /cmd_vel into
     per-module steer-angle + wheel-speed commands.
-
-    NOTE: rover_swerve_controller/swerve_kinematics_node.py still hardcodes
-    wheel radius and module positions from the old box/cylinder placeholder
-    (WHEEL_BASE=0.4, WHEEL_SEPARATION=0.5, WHEEL_RADIUS=0.15). Those no
-    longer match this CAD geometry's actual per-corner joint origins below
-    and need to be re-derived before trusting /cmd_vel-driven turning
-    behavior against this model — see the TODO in that file.
   -->
 
   <xacro:include filename="$(find rover_description)/urdf/materials.xacro" />
   <xacro:include filename="$(find rover_description)/urdf/rover.gazebo" />
 
+  <!--
+    REP-103 alignment layer.
+
+    The SolidWorks-to-URDF export gave the chassis body a frame where +x
+    points LEFT and +y points to the REAR (see the *_steer_joint origins
+    below: "front" modules sit at negative y, "left" modules at positive x).
+    ROS conventions (Nav2, slam_toolbox, RViz, teleop) all assume base_link
+    is +x forward, +y left, +z up. Driving straight worked but odometry came
+    out with the axes swapped, and Nav2 would have driven the rover sideways
+    toward goals.
+
+    Fix: base_link is a new REP-103-compliant root. chassis_link is the raw
+    CAD body, mounted on base_link through a fixed +90 deg yaw so its "+x =
+    left" axis lands on base_link's +y. Everything CAD-derived (meshes,
+    swerve modules) hangs off chassis_link and is untouched; everything ROS
+    talks to (odom, TF, sensors) hangs off base_link. If the finalized CAD
+    is ever re-exported with a corrected coordinate system, delete this
+    layer and rename chassis_link back to base_link.
+
+    base_link gets a token inertial only because gz-sim requires the model's
+    root (canonical) link to have one; the real 595 kg is on chassis_link
+    and gets lumped in across the fixed joint.
+  -->
   <link name="base_link">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+    </inertial>
+  </link>
+
+  <joint name="base_link_to_chassis" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 1.5708"/>
+    <parent link="base_link"/>
+    <child link="chassis_link"/>
+  </joint>
+
+  <link name="chassis_link">
     <inertial>
       <origin xyz="1.7662172446492366e-08 0.04237215152825712 0.09216107589120397" rpy="0 0 0"/>
       <mass value="595.1849542563896"/>
@@ -256,34 +285,37 @@
 
   <joint name="front_left_steer_joint" type="continuous">
     <origin xyz="0.3556 -0.3175 0.0254" rpy="0 0 0"/>
-    <parent link="base_link"/>
+    <parent link="chassis_link"/>
     <child link="front_left_steer_link"/>
     <axis xyz="0.0 0.0 1.0"/>
   </joint>
 
   <joint name="front_right_steer_joint" type="continuous">
     <origin xyz="-0.3556 -0.3175 0.0254" rpy="0 0 0"/>
-    <parent link="base_link"/>
+    <parent link="chassis_link"/>
     <child link="front_right_steer_link"/>
     <axis xyz="0.0 0.0 1.0"/>
   </joint>
 
   <joint name="rear_left_steer_joint" type="continuous">
     <origin xyz="0.3556 0.2921 0.0254" rpy="0 0 0"/>
-    <parent link="base_link"/>
+    <parent link="chassis_link"/>
     <child link="rear_left_steer_link"/>
     <axis xyz="0.0 0.0 1.0"/>
   </joint>
 
   <joint name="rear_right_steer_joint" type="continuous">
     <origin xyz="-0.3556 0.2921 0.0254" rpy="0 0 0"/>
-    <parent link="base_link"/>
+    <parent link="chassis_link"/>
     <child link="rear_right_steer_link"/>
     <axis xyz="0.0 0.0 1.0"/>
   </joint>
 
   <!-- Sensor mount points are placeholders (not yet taken from real CAD
-       mount locations) — revisit once the chassis design settles. -->
+       mount locations) — revisit once the chassis design settles. These
+       hang off base_link (not chassis_link) on purpose, so their frames
+       are REP-103 aligned: lidar 0 deg and camera +x both point at the
+       rover's true forward. -->
   <joint name="lidar_joint" type="fixed">
     <parent link="base_link"/>
     <child link="lidar_link"/>
@@ -360,10 +392,40 @@
     </plugin>
   </gazebo>
 
+  <!-- Ground-truth odometry: publishes the odom->base_link transform and an
+       Odometry message straight from Gazebo's physics state, i.e. zero drift.
+       This is deliberately the cheap version to unblock slam_toolbox / Nav2
+       bring-up (a continuous odom->base_link TF is a hard requirement for
+       both). Replace later with real wheel odometry integrated from the
+       swerve module joint states, which will have the drift SLAM exists to
+       correct. dimensions=2 matches the planar sim world and the 2D
+       slam_toolbox that consumes this. -->
+  <gazebo>
+    <plugin filename="gz-sim-odometry-publisher-system"
+            name="gz::sim::systems::OdometryPublisher">
+      <dimensions>2</dimensions>
+      <odom_frame>odom</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <odom_publish_frequency>50</odom_publish_frequency>
+      <!-- Leading slash keeps these as absolute gz topic names, so Gazebo
+           does NOT scope them as /model/rover/... . The gz_bridge in
+           gazebo.launch.py bridges these exact names into ROS. -->
+      <odom_topic>/odom</odom_topic>
+      <tf_topic>/odom_tf</tf_topic>
+    </plugin>
+  </gazebo>
+
   <gazebo reference="lidar_link">
     <sensor name="lidar" type="gpu_lidar">
       <topic>scan</topic>
       <update_rate>10</update_rate>
+      <!-- Without this, Gazebo stamps /scan with a scoped sensor name like
+           "rover/.../lidar" that has no entry in the TF tree
+           (robot_state_publisher only publishes "lidar_link"), so
+           slam_toolbox and RViz would silently drop every scan. VERIFY on
+           the next run that /scan's header.frame_id is exactly
+           "lidar_link". -->
+      <gz_frame_id>lidar_link</gz_frame_id>
       <ray>
         <scan>
           <horizontal>

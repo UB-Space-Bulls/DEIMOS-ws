@@ -13,9 +13,13 @@ MODULES = ("front_left", "front_right", "rear_left", "rear_right")
 # from a symmetric WHEEL_BASE/WHEEL_SEPARATION pair -- the real chassis is
 # NOT symmetric front-to-back (front modules sit 0.3175m from center, rear
 # modules sit 0.2921m from center). Values below are each *_steer_joint's
-# <origin> in rover.urdf.xacro, converted from that URDF/base_link frame
-# (where +x = left, -y = front -- swapped and sign-flipped from this file's
-# own "x: forward, y: left" convention) into (forward_offset, left_offset).
+# <origin> in rover.urdf.xacro, expressed relative to chassis_link -- the
+# raw CAD body frame, where +x = left and -y = front, swapped and
+# sign-flipped from this file's own "x: forward, y: left" convention. That
+# conversion (forward = -chassis_y, left = +chassis_x) is baked into the
+# numbers below. (base_link itself is now REP-103 aligned via a fixed +90
+# deg yaw joint in the URDF, but the steer joints still hang off
+# chassis_link, so these stay in chassis_link terms.)
 # Re-derive these from the URDF again if the chassis geometry changes.
 MODULE_POSITIONS = {
     "front_left": (0.3175, 0.3556),

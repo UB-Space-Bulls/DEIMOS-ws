@@ -3,7 +3,7 @@
 
 <xacro:property name="body_color" value="Gazebo/Silver" />
 
-<gazebo reference="base_link">
+<gazebo reference="chassis_link">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
