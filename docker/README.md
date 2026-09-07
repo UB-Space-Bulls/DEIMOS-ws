@@ -27,7 +27,11 @@ docker build -f docker/dockerfile.dev -t rover-dev .
 `run-dev.sh` is a wrapper around `docker run` that also handles two things
 you'd otherwise have to remember by hand:
 - `xhost +local:docker` — lets containers draw windows (Gazebo, RViz) on
-  your screen. Safe to re-run; it's idempotent.
+  your screen. Safe to re-run; it's idempotent. If your machine doesn't have
+  `xhost` at all, the script prints a note and carries on instead of dying —
+  WSL2's built-in WSLg display doesn't need it, and headless work
+  (`colcon build`, running nodes) never did. On a bare Linux host that *does*
+  need it: `sudo apt install x11-xserver-utils`.
 - `--user $(id -u):$(id -g)` — runs the container as your host user instead
   of root, so files `colcon build` creates in the bind-mounted `rover_ws`
   come out owned by you, not root (see the "Common footguns" note in the
@@ -60,16 +64,22 @@ That new shell auto-sources ROS and the workspace on its own — no manual
 <summary>What `run-dev.sh` runs under the hood, if you need to customize it</summary>
 
 ```bash
-xhost +local:docker
+xhost +local:docker          # skipped automatically if `xhost` isn't installed
 docker run -it --rm \
   --net=host \
   --name rover-dev-container \
   -e DISPLAY=$DISPLAY \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v $(pwd)/rover_ws:/workspaces/rover_ws \
+  --device /dev/dri:/dev/dri \
   --user $(id -u):$(id -g) \
   rover-dev
 ```
+
+The script only adds `--device /dev/dri` when that path actually exists on
+your machine -- `docker run` errors out on a missing `--device`, and plain
+VMs / WSL2 without GPU passthrough don't have one. Without it you get
+software rendering: slower Gazebo, but it still runs.
 
 The `-v .../rover_ws` bind mount is what maps your local `rover_ws` into the
 container so edits made outside the container are reflected inside it live.
