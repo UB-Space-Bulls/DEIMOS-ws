@@ -1,0 +1,213 @@
+# =============================================================================
+# dockerfile.isaac-dev — x86_64 GPU sandbox for the Isaac ROS VSLAM pull-forward
+# validation detour (see CLAUDE.md's SLAM go/no-go plan).
+#
+# NOT one of the project's three standing images (dockerfile.dev/.basestation/
+# .jetson) and not wired into their conventions on purpose — this is a
+# throwaway harness to answer one question early: does isaac_ros_visual_slam
+# (cuVSLAM), fed by a ZED stereo camera, work well enough on a discrete GPU
+# to be worth betting on for the Orin in December? If yes, this container's
+# job is done and the real work happens in dockerfile.jetson. If no, no
+# changes needed anywhere else — slam_toolbox stays primary as documented.
+#
+# Requires on the HOST (not this Dockerfile's job):
+#   - An x86_64 machine with a real NVIDIA GPU, Ampere architecture or newer
+#     (RTX 4050 = Ada Lovelace, qualifies)
+#   - NVIDIA driver 580+ (the driver itself lives on the host; the container
+#     only needs the CUDA *toolkit*, injected against the host driver at
+#     `docker run` time via the NVIDIA Container Toolkit)
+#   - NVIDIA Container Toolkit installed + configured (`nvidia-ctk runtime
+#     configure`) so `docker run --gpus all` actually exposes the GPU --
+#     this is a different mechanism than dockerfile.dev's `--device /dev/dri`,
+#     which is display-only (Mesa/OpenGL for RViz/Gazebo windows) and does
+#     NOT expose CUDA compute
+#   - A ZED 2 camera connected via USB3
+#
+# Version pins below (CUDA 13.0+, driver 580+, TensorRT ~10.13, ZED SDK 5.2,
+# ROS 2 Jazzy) were confirmed against Isaac ROS's and Stereolabs' current
+# docs as of this writing -- these move fast, so re-check
+# https://nvidia-isaac-ros.github.io and https://www.stereolabs.com/developers/release
+# before building if this file sits unused for a while.
+#
+# CHECKPOINT -- do not skip: build and manually verify the `zed-sdk-check`
+# stage BEFORE building the full image. There are unresolved forum reports
+# of ZED SDK 5.2 breaking (Depth View/Sensors/Diagnostics/Python API all
+# fail, only ZED Explorer works) on Ubuntu 24.04 + CUDA 13.0 for at least
+# one ZED camera model -- unconfirmed whether that's model-specific or a
+# broader SDK/OS combo bug, so verify against the actual ZED 2 before
+# spending time on the zed-ros2-wrapper + Isaac ROS layers on top of it.
+#
+#   docker build -f docker/dockerfile.isaac-dev --target zed-sdk-check \
+#       -t rover-isaac-dev:zed-check .
+#   docker run -it --rm --gpus all --privileged \
+#       -e DISPLAY="$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix \
+#       rover-isaac-dev:zed-check bash
+#   # inside the container:
+#   /usr/local/zed/tools/ZED_Explorer
+#   /usr/local/zed/tools/ZED_Diagnostic
+#
+# Only once that passes, build the full image (reuses the cached
+# zed-sdk-check layers, so this is cheap):
+#
+#   docker build -f docker/dockerfile.isaac-dev -t rover-isaac-dev .
+# =============================================================================
+
+FROM ros:jazzy-ros-base AS zed-sdk-check
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROS_DISTRO=jazzy
+
+# -----------------------------------------------------------------------------
+# Dev tooling
+# zstd is REQUIRED, not optional: the ZED SDK 5.2 installer is a
+# zstd-compressed makeself archive (ZED_SDK_..._v5.2.3.zstd.run). Without the
+# `zstd` binary on PATH its self-extraction fails with "Extraction failed"
+# and the script exits 15 -- the installer even prints
+# "Use 'sudo apt install zstd' if zstd is not found". Older ZED SDK .run
+# files were gzip/xz; 5.2 switched to zstd.
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git git-lfs curl wget vim nano \
+    python3-pip python3-venv \
+    lsb-release software-properties-common \
+    zstd \
+    ros-dev-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# CUDA 13.0 RUNTIME LIBRARIES ONLY -- not the full toolkit.
+#
+# The `zed-sdk-check` stage only has to run ZED_Explorer / ZED_Diagnostic,
+# which link the CUDA runtime + a few math libs. The full `cuda-toolkit-13-0`
+# meta-package is ~7GB: it drags in nvcc, Nsight, GPUDirect Storage
+# (`cuda-13.0/gds/*`), profilers, docs and samples -- none of it reachable
+# from ZED_Explorer, and it ENOSPC'd this 47GB root partition mid-extract.
+# The driver itself stays on the host and is injected by the NVIDIA Container
+# Toolkit at `docker run --gpus all` time; it is never installed here.
+#
+# This is the minimum runtime set; ZED SDK links cudart + cuBLAS/cuFFT/cuRAND
+# and uses nvRTC for kernel JIT. If ZED_Explorer fails at the checkpoint with
+# a missing `.so`, add exactly that one `cuda-*-13-0` / `libcu*-13-0` package
+# and rebuild -- don't widen this list pre-emptively.
+#
+# NOTE: the `full` stage (cuDNN + TensorRT + Isaac ROS) needs nvcc + dev
+# headers to build zed-ros2-wrapper and cuVSLAM -- it will add the toolchain
+# back, and it needs a bigger disk than this partition regardless (see header).
+#
+# VERIFY: cuda-keyring version + exact package names against
+# https://developer.nvidia.com/cuda-downloads (Linux x86_64, Ubuntu 24.04,
+# deb (network)) -- these bump often.
+# -----------------------------------------------------------------------------
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
+    && dpkg -i cuda-keyring_1.1-1_all.deb \
+    && rm cuda-keyring_1.1-1_all.deb \
+    && apt-get update && apt-get install -y --no-install-recommends \
+       cuda-cudart-13-0 \
+       cuda-nvrtc-13-0 \
+       libcublas-13-0 \
+       libcufft-13-0 \
+       libcurand-13-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sfn /usr/local/cuda-13.0 /usr/local/cuda \
+    && echo /usr/local/cuda/lib64 > /etc/ld.so.conf.d/cuda.conf \
+    && ldconfig
+# The runtime .deb packages install under /usr/local/cuda-13.0/ but do NOT
+# create the /usr/local/cuda symlink (that comes from the full toolkit
+# meta-package we dropped) -- create it by hand so the paths below resolve.
+# ldconfig (above) already registers /usr/local/cuda/lib64, so LD_LIBRARY_PATH
+# isn't strictly needed -- set it anyway for tools that read it directly.
+# ${LD_LIBRARY_PATH:+:...} avoids a dangling ':' (and a build warning) when the
+# base image leaves the var unset.
+ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+
+# -----------------------------------------------------------------------------
+# ZED SDK 5.2
+# Stereolabs ships this as a versioned .run installer (a makeself self-extractor),
+# not an apt package -- the download URL encodes CUDA version + Ubuntu version,
+# so it has to match the CUDA 13.0 / Ubuntu 24.04 combo installed above.
+# VERIFY: exact SDK build URL against https://www.stereolabs.com/developers/release
+#
+# Flags passed after `--` go to the embedded install script:
+#   silent          - accept the EULA, no interactive prompts (required: no TTY
+#                     in `docker build`; without it the installer stalls on a
+#                     prompt and gets killed -- SIGTERM / exit 15)
+#   skip_cuda       - we already installed cuda-toolkit-13-0 above; stop the
+#                     installer trying to apt-install its own CUDA on top
+#   skip_python     - the Python API; zed-ros2-wrapper is C++, doesn't need it
+#   skip_od_module  - the object-detection / neural-depth AI models: multi-GB,
+#                     pulled over the network at install time, and unused by
+#                     cuVSLAM or by this checkpoint. Dropping them is what keeps
+#                     this stage inside a tight root partition.
+# Do NOT add `skip_tools` -- ZED_Explorer / ZED_Diagnostic ARE the checkpoint.
+#
+# wget -nv (not -q) so a truncated download shows up in the build log as a
+# size mismatch rather than surfacing later as a confusing "Extraction failed".
+# -----------------------------------------------------------------------------
+RUN wget -nv 'https://download.stereolabs.com/zedsdk/5.2/cu13/ubuntu24' -O ZED_SDK_Linux.run \
+    && ls -lh ZED_SDK_Linux.run \
+    && chmod +x ZED_SDK_Linux.run \
+    && ./ZED_SDK_Linux.run -- silent skip_cuda skip_python skip_od_module \
+    && rm ZED_SDK_Linux.run
+
+# ============================= CHECKPOINT ==================================
+# Build up to here with --target zed-sdk-check and manually verify the ZED 2
+# against ZED_Explorer/ZED_Diagnostic (see header) before continuing past
+# this point. Everything below assumes that passed.
+# =============================================================================
+
+FROM zed-sdk-check AS full
+
+# -----------------------------------------------------------------------------
+# cuDNN + TensorRT (from the same NVIDIA apt repo added in the base stage)
+# Deliberately in `full`, not `zed-sdk-check`: these are Isaac ROS *inference*
+# dependencies (cuVSLAM's TensorRT path), not needed by ZED_Explorer/
+# ZED_Diagnostic, and together they're the fattest layers in the image --
+# keeping them out of the checkpoint stage keeps that build small enough to
+# fit on a tight disk.
+# VERIFY: exact package names/versions -- Isaac ROS 4.0 was tested against
+# TensorRT ~10.13.3.9; confirm the resolved apt version is in that range.
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcudnn9-cuda-13 libcudnn9-dev-cuda-13 \
+    tensorrt \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# isaac_ros_visual_slam + isaac_ros_common
+# Released through the standard ROS 2 Jazzy apt repo (already configured by
+# the ros:jazzy-ros-base image) as ros-jazzy-isaac-ros-* packages, same as
+# any other ros-jazzy-* package in dockerfile.dev -- no separate NVIDIA apt
+# repo needed for these specifically.
+# VERIFY: `apt-cache search isaac-ros` inside the container if this fails --
+# Isaac ROS's docs were mid-transition to their own "Isaac ROS CLI" tooling
+# as of this writing, so the plain-apt path should be re-confirmed.
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-isaac-ros-common \
+    ros-jazzy-isaac-ros-visual-slam \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Workspace
+# zed-ros2-wrapper isn't in apt -- clone it into the bind-mounted rover_ws/src
+# on the host (same convention as any other source-built package here) and
+# colcon build it inside the container, rather than baking it into the image.
+#   git clone --recursive https://github.com/stereolabs/zed-ros2-wrapper.git
+# -----------------------------------------------------------------------------
+ENV ROS_WS=/workspaces/rover_ws
+RUN mkdir -p ${ROS_WS}/src
+WORKDIR ${ROS_WS}
+
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc && \
+    echo "[ -f ${ROS_WS}/install/setup.bash ] && source ${ROS_WS}/install/setup.bash" >> /etc/bash.bashrc
+
+# -----------------------------------------------------------------------------
+# Entrypoint
+# No Zenoh here on purpose -- this container isn't talking to the rover
+# network, it's a standalone perception validation box. Default RMW is fine.
+# -----------------------------------------------------------------------------
+COPY docker/ros_entrypoint.sh /
+RUN chmod +x /ros_entrypoint.sh
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]
