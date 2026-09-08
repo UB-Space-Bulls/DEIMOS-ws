@@ -23,11 +23,14 @@
 #     NOT expose CUDA compute
 #   - A ZED 2 camera connected via USB3
 #
-# Version pins below (CUDA 13.0+, driver 580+, TensorRT ~10.13, ZED SDK 5.2,
-# ROS 2 Jazzy) were confirmed against Isaac ROS's and Stereolabs' current
-# docs as of this writing -- these move fast, so re-check
-# https://nvidia-isaac-ros.github.io and https://www.stereolabs.com/developers/release
-# before building if this file sits unused for a while.
+# Version pins: the zed-sdk-check stage installs CUDA 13.0 *runtime* libs +
+# ZED SDK 5.2 (driver 580+ on the host). The `full` stage then pulls Isaac ROS
+# 4.6, whose ros-jazzy-isaac-ros-common Depends drags in cuda-toolkit-13-2 and
+# libnvvpi4 (VPI 4, from the Jetson r39.2 x86_64 repo); cuDNN/TensorRT are
+# deliberately NOT installed (cuVSLAM 4.6 doesn't depend on them). All of this
+# moves fast -- re-check https://nvidia-isaac-ros.github.io/getting_started and
+# https://www.stereolabs.com/developers/release before building if this file
+# sits unused for a while.
 #
 # CHECKPOINT -- do not skip: build and manually verify the `zed-sdk-check`
 # stage BEFORE building the full image. There are unresolved forum reports
@@ -90,9 +93,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # a missing `.so`, add exactly that one `cuda-*-13-0` / `libcu*-13-0` package
 # and rebuild -- don't widen this list pre-emptively.
 #
-# NOTE: the `full` stage (cuDNN + TensorRT + Isaac ROS) needs nvcc + dev
-# headers to build zed-ros2-wrapper and cuVSLAM -- it will add the toolchain
-# back, and it needs a bigger disk than this partition regardless (see header).
+# NOTE: the `full` stage needs nvcc + CUDA dev headers to build zed-ros2-wrapper
+# -- it gets them back automatically, because ros-jazzy-isaac-ros-common Depends
+# on cuda-toolkit-13-2 and apt pulls the whole toolkit in as a dependency there.
 #
 # VERIFY: cuda-keyring version + exact package names against
 # https://developer.nvidia.com/cuda-downloads (Linux x86_64, Ubuntu 24.04,
@@ -132,8 +135,8 @@ ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 #   silent          - accept the EULA, no interactive prompts (required: no TTY
 #                     in `docker build`; without it the installer stalls on a
 #                     prompt and gets killed -- SIGTERM / exit 15)
-#   skip_cuda       - we already installed cuda-toolkit-13-0 above; stop the
-#                     installer trying to apt-install its own CUDA on top
+#   skip_cuda       - we already installed the CUDA 13.0 runtime libs above;
+#                     stop the installer trying to apt-install its own CUDA on top
 #   skip_python     - the Python API; zed-ros2-wrapper is C++, doesn't need it
 #   skip_od_module  - the object-detection / neural-depth AI models: multi-GB,
 #                     pulled over the network at install time, and unused by
@@ -159,34 +162,78 @@ RUN wget -nv 'https://download.stereolabs.com/zedsdk/5.2/cu13/ubuntu24' -O ZED_S
 FROM zed-sdk-check AS full
 
 # -----------------------------------------------------------------------------
-# cuDNN + TensorRT (from the same NVIDIA apt repo added in the base stage)
-# Deliberately in `full`, not `zed-sdk-check`: these are Isaac ROS *inference*
-# dependencies (cuVSLAM's TensorRT path), not needed by ZED_Explorer/
-# ZED_Diagnostic, and together they're the fattest layers in the image --
-# keeping them out of the checkpoint stage keeps that build small enough to
-# fit on a tight disk.
-# VERIFY: exact package names/versions -- Isaac ROS 4.0 was tested against
-# TensorRT ~10.13.3.9; confirm the resolved apt version is in that range.
+# Two more NVIDIA apt repos are needed on x86_64 for the Isaac ROS layer.
+# (Jetson images get all of this from the bundled Jetson APT repo; a plain
+# x86_64 ros:jazzy-ros-base has none of it.) Per
+# https://nvidia-isaac-ros.github.io/getting_started :
+#
+#   1. CUDA repo          -- already added in the zed-sdk-check stage.
+#   2. Isaac ROS repo     -- the ros-jazzy-isaac-ros-* debians themselves.
+#                            NOT in packages.ros.org: an earlier version of
+#                            this file wrongly assumed they were -- against a
+#                            plain ros:jazzy-ros-base, `apt-cache policy
+#                            ros-jazzy-isaac-ros-visual-slam` resolves nothing
+#                            while ros-jazzy-nav2-* resolves fine.
+#   3. Jetson x86_64 repo -- provides libnvvpi4 / vpi4-dev (NVIDIA VPI 4), a
+#                            hard Depends of ros-jazzy-isaac-ros-common that is
+#                            in NEITHER the CUDA repo nor the Isaac ROS repo.
+#                            The "r39.2" suite matches JetPack 7.2 / Jetson
+#                            Linux 39.2 -- the exact release the rover's Orin
+#                            runs (CLAUDE.md) -- so the VPI here lines up with
+#                            what dockerfile.jetson uses on target. The repo's
+#                            own Release file labels it "L4T Jetson host
+#                            components" -- i.e. built for exactly this
+#                            x86-dev-host-for-a-Jetson-target case.
+#
+# gnupg isn't in the base stage's apt list (adding it there would bust the
+# cached zed-sdk-check layers), so install it here first.
+# VERIFY all of: "release-4.6" (swap for "release-4" to track latest 4.x),
+# "r39.2", and both key URLs against the Isaac ROS getting-started page --
+# NVIDIA bumps these dirs regularly.
 # -----------------------------------------------------------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libcudnn9-cuda-13 libcudnn9-dev-cuda-13 \
-    tensorrt \
+RUN apt-get update && apt-get install -y --no-install-recommends gnupg ca-certificates \
+    && curl -fsSL https://isaac.download.nvidia.com/isaac-ros/repos.key \
+       | gpg --dearmor -o /usr/share/keyrings/nvidia-isaac-ros.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/nvidia-isaac-ros.gpg] https://isaac.download.nvidia.com/isaac-ros/release-4.6 noble main" \
+       > /etc/apt/sources.list.d/nvidia-isaac-ros.list \
+    && curl -fsSL https://repo.download.nvidia.com/jetson/jetson-ota-public.asc \
+       | gpg --dearmor -o /usr/share/keyrings/nvidia-jetson.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/nvidia-jetson.gpg] https://repo.download.nvidia.com/jetson/x86_64/noble r39.2 main" \
+       > /etc/apt/sources.list.d/nvidia-jetson.list \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
-# isaac_ros_visual_slam + isaac_ros_common
-# Released through the standard ROS 2 Jazzy apt repo (already configured by
-# the ros:jazzy-ros-base image) as ros-jazzy-isaac-ros-* packages, same as
-# any other ros-jazzy-* package in dockerfile.dev -- no separate NVIDIA apt
-# repo needed for these specifically.
-# VERIFY: `apt-cache search isaac-ros` inside the container if this fails --
-# Isaac ROS's docs were mid-transition to their own "Isaac ROS CLI" tooling
-# as of this writing, so the plain-apt path should be re-confirmed.
+# isaac_ros_visual_slam + isaac_ros_common (and everything they pull in).
+#
+# Let apt solve the whole CUDA / cuDNN / TensorRT / VPI graph in ONE pass off
+# the Isaac ROS package metadata -- do NOT hand-install cuda-toolkit / cuDNN /
+# TensorRT first:
+#   - ros-jazzy-isaac-ros-common's Depends pins `cuda-toolkit-13-2` exactly
+#     (not the 13-0 *runtime* libs the checkpoint stage installed). Letting it
+#     pull that in also restores nvcc + CUDA dev headers -- which is what
+#     zed-ros2-wrapper needs to compile -- so a separate "dev toolchain" step
+#     isn't needed.
+#   - cuVSLAM 4.6 does NOT declare cuDNN or TensorRT as dependencies at all.
+#     An unpinned `tensorrt` meta currently resolves to 11.2 / cuda13.3 and
+#     would drag a *third* CUDA minor into the image for nothing. If a runtime
+#     "missing libnvinfer" ever surfaces, add exactly the TensorRT build Isaac
+#     ROS asks for at that point, pinned.
+#
+# Then repoint /usr/local/cuda from the 13.0 tree the checkpoint symlinked to
+# the 13.2 tree Isaac ROS just installed, and refresh the linker cache.
+#
+# Heavy step: the visual-slam .deb alone is ~560MB, and with NITROS /
+# image-proc / interfaces + cuda-toolkit-13-2 this pulls several GB -- the
+# first build of this layer is long.
+# VERIFY: `apt-cache policy ros-jazzy-isaac-ros-visual-slam` should show the
+# isaac.download.nvidia.com origin and a 4.6.x version.
 # -----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-jazzy-isaac-ros-common \
-    ros-jazzy-isaac-ros-visual-slam \
-    && rm -rf /var/lib/apt/lists/*
+       ros-jazzy-isaac-ros-common \
+       ros-jazzy-isaac-ros-visual-slam \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sfn /usr/local/cuda-13.2 /usr/local/cuda \
+    && ldconfig
 
 # -----------------------------------------------------------------------------
 # Workspace

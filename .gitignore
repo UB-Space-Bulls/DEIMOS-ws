@@ -5,6 +5,13 @@ build/
 install/
 log/
 
+# Third-party ROS source cloned into the workspace for the isaac-dev sandbox
+# (see docker/dockerfile.isaac-dev + docker/run-isaac-dev.sh). External repos
+# pinned to a tag, colcon-built inside the container -- not part of this
+# repo's history.
+/rover_ws/src/zed-ros2-wrapper/
+/rover_ws/src/zed-ros2-interfaces/
+
 # =========================
 # Python
 # =========================
