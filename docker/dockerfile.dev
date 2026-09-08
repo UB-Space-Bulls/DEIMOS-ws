@@ -60,6 +60,7 @@ ENV ZENOH_ROUTER_AUTOSTART=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-ros-gz \
     ros-jazzy-gz-ros2-control \
+    ros-jazzy-teleop-twist-keyboard \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
