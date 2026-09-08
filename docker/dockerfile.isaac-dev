@@ -263,7 +263,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        ros-jazzy-compressed-depth-image-transport \
        ros-jazzy-theora-image-transport \
        ros-jazzy-point-cloud-transport \
+       ros-jazzy-isaac-ros-managed-nitros \
     && rm -rf /var/lib/apt/lists/*
+# isaac-ros-managed-nitros: the wrapper does find_package(isaac_ros_managed_nitros
+# QUIET) and, when present, enables the NITROS zero-copy path so the ZED node
+# hands GPU images straight to cuVSLAM with no CPU round-trip. Without it the
+# first build logs "ISAAC ROS NITROS transport will not be available" and falls
+# back to plain image_transport -- works, but the perf number this sandbox
+# exists to judge would carry an asterisk. isaac-ros-nitros (the runtime) is
+# already pulled by isaac-ros-visual-slam; this is just the build-time helper.
 
 # -----------------------------------------------------------------------------
 # Open up /usr/local/zed so a non-root `docker run --user` can read it.
