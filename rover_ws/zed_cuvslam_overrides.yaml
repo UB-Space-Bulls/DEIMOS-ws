@@ -10,9 +10,12 @@
 ---
 /**:
     ros__parameters:
-        general:
+        video:
             # cuVSLAM consumes the MONO8 rectified stereo pair
             # (/zed/zed_node/{left,right}/gray/rect/image). Off by default.
+            # NOTE: these live under `video:`, NOT `general:` -- putting them
+            # under general: makes the ZED node silently ignore them and
+            # `ros2 topic info` shows "Publisher count: 0".
             publish_gray: true
             publish_left_right: true
         depth:
