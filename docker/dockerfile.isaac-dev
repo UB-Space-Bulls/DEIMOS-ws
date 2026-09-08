@@ -266,6 +266,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
+# Open up /usr/local/zed so a non-root `docker run --user` can read it.
+# The ZED SDK .run installer lays the whole tree down mode 770 root:zed --
+# fine for a root-only container, but run-isaac-dev.sh runs as the host UID/GID
+# (to keep colcon's build/ output host-owned, per CLAUDE.md), and that user
+# isn't in the container's `zed` group. Result: `find_package(ZED)` in
+# zed_components can't read /usr/local/zed/zed-config.cmake and the build dies
+# with "Could not find ... ZEDConfig.cmake". a+rX fixes traverse+read for the
+# headers/libs/cmake; settings/ also needs to be writable because the SDK
+# caches per-camera calibration there on first open().
+# In the `full` stage, not zed-sdk-check, so the checkpoint layers stay cached.
+# -----------------------------------------------------------------------------
+RUN chmod -R a+rX /usr/local/zed \
+    && chmod -R a+rwX /usr/local/zed/settings
+
+# -----------------------------------------------------------------------------
 # Workspace
 # The ZED packages aren't in apt -- clone them into the bind-mounted
 # rover_ws/src on the host (same convention as any other source-built package
