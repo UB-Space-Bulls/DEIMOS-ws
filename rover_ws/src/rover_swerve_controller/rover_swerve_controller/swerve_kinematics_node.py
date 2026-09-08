@@ -39,14 +39,19 @@ WHEEL_RADIUS = 0.1016
 MIN_SPEED_FOR_STEERING = 1e-3
 
 
+def _shortest_angle_diff(a: float, b: float) -> float:
+    """Signed difference a - b, wrapped to (-pi, pi]."""
+    return math.atan2(math.sin(a - b), math.cos(a - b))
+
+
 class SwerveKinematicsNode(Node):
     """Converts /cmd_vel into per-module steer-angle and wheel-speed commands.
 
-    NOTE: this does the direct inverse-kinematics computation only. It does
-    not do wheel-angle-flip optimization (i.e. choosing to reverse a wheel's
-    direction and rotate the module by <90 deg instead of turning it up to
-    180 deg) -- a real implementation should add that to avoid unnecessary
-    steering motion.
+    Includes wheel-angle-flip optimization: if the target steer angle is
+    more than 90 deg from the module's current angle, it's cheaper to steer
+    to the opposite angle instead (always <=90 deg away) and reverse the
+    wheel direction, than to physically rotate the module the long way
+    around (up to 180 deg) for the same net wheel velocity vector.
     """
 
     def __init__(self):
@@ -77,13 +82,22 @@ class SwerveKinematicsNode(Node):
             speed = math.hypot(module_vx, module_vy)
 
             if speed > MIN_SPEED_FOR_STEERING:
-                angle = math.atan2(module_vy, module_vx)
+                target_angle = math.atan2(module_vy, module_vx)
+                last_angle = self._last_steer_angles[name]
+                wheel_direction = 1.0
+
+                if abs(_shortest_angle_diff(target_angle, last_angle)) > math.pi / 2:
+                    target_angle = _shortest_angle_diff(target_angle + math.pi, 0.0)
+                    wheel_direction = -1.0
+
+                angle = target_angle
                 self._last_steer_angles[name] = angle
             else:
                 angle = self._last_steer_angles[name]
+                wheel_direction = 1.0
 
             steer_angles.append(angle)
-            wheel_speeds.append(speed / WHEEL_RADIUS)
+            wheel_speeds.append(wheel_direction * speed / WHEEL_RADIUS)
 
         self._steer_pub.publish(Float64MultiArray(data=steer_angles))
         self._wheel_pub.publish(Float64MultiArray(data=wheel_speeds))
