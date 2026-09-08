@@ -2,7 +2,8 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, RegisterEventHandler
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -74,24 +75,35 @@ def generate_launch_description():
         output="screen",
     )
 
+    # /controller_manager doesn't exist until gz_ros2_control's plugin
+    # finishes initializing *inside Gazebo*, which only happens once
+    # spawn_robot has actually inserted the model into the running sim --
+    # it is NOT a standalone process that's up before that. Each spawner
+    # below only retries against that service for --controller-manager-
+    # timeout seconds before giving up (silently, from the teleop side --
+    # /cmd_vel keeps flowing, the controllers just never load), so they
+    # must not start racing against Gazebo's own startup. They're chained
+    # below via OnProcessExit instead of being listed as parallel actions.
+    controller_manager_timeout = ["--controller-manager-timeout", "30"]
+
     joint_state_broadcaster_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["joint_state_broadcaster"],
+        arguments=["joint_state_broadcaster", *controller_manager_timeout],
         output="screen",
     )
 
     steer_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["steer_controller"],
+        arguments=["steer_controller", *controller_manager_timeout],
         output="screen",
     )
 
     wheel_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["wheel_controller"],
+        arguments=["wheel_controller", *controller_manager_timeout],
         output="screen",
     )
 
@@ -101,15 +113,34 @@ def generate_launch_description():
         output="screen",
     )
 
+    # spawn_robot is the `ros_gz_sim create` process -- it exits once the
+    # model is in the sim and gz_ros2_control's controller_manager is up,
+    # so its exit is the right trigger for the first spawner. The
+    # steer/wheel spawners are chained off joint_state_broadcaster's exit
+    # rather than also off spawn_robot, so they don't hit the controller
+    # manager concurrently with it.
+    delay_joint_state_broadcaster_after_spawn = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=spawn_robot,
+            on_exit=[joint_state_broadcaster_spawner],
+        )
+    )
+
+    delay_module_controllers_after_joint_state_broadcaster = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=joint_state_broadcaster_spawner,
+            on_exit=[steer_controller_spawner, wheel_controller_spawner],
+        )
+    )
+
     return LaunchDescription(
         [
             gz_sim,
             robot_state_publisher,
             spawn_robot,
             gz_bridge,
-            joint_state_broadcaster_spawner,
-            steer_controller_spawner,
-            wheel_controller_spawner,
+            delay_joint_state_broadcaster_after_spawn,
+            delay_module_controllers_after_joint_state_broadcaster,
             swerve_kinematics_node,
         ]
     )
