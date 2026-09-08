@@ -48,9 +48,12 @@ parameters = [{
     'enable_localization_n_mapping': True,
     # Frames: cuVSLAM needs TF from base_frame to each optical frame. The ZED
     # node's robot_state_publisher (zed_description) puts these on /tf_static.
-    'base_frame': cam,
+    # The URDF root link is "<cam>_camera_link" (verified via `ros2 topic echo
+    # /tf_static`) -- NOT bare "<cam>", which is what the wrapper would
+    # broadcast from positional tracking, but that's disabled here.
+    'base_frame': f'{cam}_camera_link',
     'camera_optical_frames': [
-        f'{cam}_left_camera_frame_optical',
+        f'{cam}_left_camera_frame_optical',   # matches camera_info header.frame_id
         f'{cam}_right_camera_frame_optical',
     ],
     # publish map->odom (loop-closed) and odom->base_link (VO). The ZED node
