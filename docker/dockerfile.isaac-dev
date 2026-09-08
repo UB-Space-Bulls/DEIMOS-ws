@@ -236,11 +236,48 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ldconfig
 
 # -----------------------------------------------------------------------------
+# Build dependencies for zed-ros2-wrapper (v5.2.x).
+# Nothing here runs `rosdep`, so the wrapper's package.xml deps that aren't
+# already dragged in by ros-base or the Isaac ROS layer have to be listed by
+# hand -- same manual-sync footgun as dockerfile.dev (see CLAUDE.md). This set
+# is every REQUIRED find_package() in zed_components / zed_wrapper that was
+# missing from the image; add to it if a later `colcon build` still fails on a
+# "Could not find a package configuration file" for something else.
+#   nlohmann-json3-dev  -- provides nlohmann_jsonConfig.cmake (NOT a ros- pkg)
+#   *-image-transport / point-cloud-transport -- the wrapper publishes
+#       compressed + Theora image streams and point clouds
+#   robot_localization  -- the wrapper ships an ekf fusion node + config
+#   xacro               -- expands the camera URDF at launch
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+       nlohmann-json3-dev \
+       ros-jazzy-xacro \
+       ros-jazzy-nmea-msgs \
+       ros-jazzy-geographic-msgs \
+       ros-jazzy-diagnostic-updater \
+       ros-jazzy-robot-localization \
+       ros-jazzy-backward-ros \
+       ros-jazzy-image-transport \
+       ros-jazzy-image-transport-plugins \
+       ros-jazzy-compressed-image-transport \
+       ros-jazzy-compressed-depth-image-transport \
+       ros-jazzy-theora-image-transport \
+       ros-jazzy-point-cloud-transport \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
 # Workspace
-# zed-ros2-wrapper isn't in apt -- clone it into the bind-mounted rover_ws/src
-# on the host (same convention as any other source-built package here) and
-# colcon build it inside the container, rather than baking it into the image.
-#   git clone --recursive https://github.com/stereolabs/zed-ros2-wrapper.git
+# The ZED packages aren't in apt -- clone them into the bind-mounted
+# rover_ws/src on the host (same convention as any other source-built package
+# here) and colcon build inside the container, rather than baking them in.
+# Pin the tags to the ZED SDK version installed above (5.2):
+#   git clone -b v5.2.2 https://github.com/stereolabs/zed-ros2-wrapper.git
+#   git clone -b 5.2.1  https://github.com/stereolabs/zed-ros2-interfaces.git
+# zed-ros2-interfaces provides zed_msgs, which the wrapper build needs.
+# NOTE: `zed_description` (exec_depend of zed_wrapper/zed_ros2) is in neither
+# repo above -- only needed to `ros2 launch` the wrapper's display, not to
+# build or to run isaac_ros_visual_slam. Clone zed-ros2-examples for it if a
+# launch file complains.
 # -----------------------------------------------------------------------------
 ENV ROS_WS=/workspaces/rover_ws
 RUN mkdir -p ${ROS_WS}/src
