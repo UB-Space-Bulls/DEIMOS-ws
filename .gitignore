@@ -13,6 +13,12 @@ log/
 /rover_ws/src/zed-ros2-interfaces/
 /rover_ws/src/zed-ros2-description/
 
+# run-isaac-dev.sh sets HOME=/workspaces/rover_ws (so --user has a writable
+# home), which lands these container-side dotfiles in the bind-mounted ws.
+/rover_ws/.bash_history
+/rover_ws/.ros/
+/rover_ws/.config/
+
 # =========================
 # Python
 # =========================
