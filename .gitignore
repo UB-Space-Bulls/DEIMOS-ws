@@ -11,6 +11,7 @@ log/
 # repo's history.
 /rover_ws/src/zed-ros2-wrapper/
 /rover_ws/src/zed-ros2-interfaces/
+/rover_ws/src/zed-ros2-description/
 
 # =========================
 # Python
