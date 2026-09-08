@@ -1,0 +1,32 @@
+# zed_cuvslam_overrides.yaml -- parameter overrides for zed_camera.launch.py
+# when the ZED node is feeding isaac_ros_visual_slam (cuVSLAM), not being used
+# on its own. Pass it with:
+#
+#   ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2 \
+#       ros_params_override_path:=/workspaces/rover_ws/zed_cuvslam_overrides.yaml
+#
+# Then, in another terminal:
+#   ros2 launch /workspaces/rover_ws/zed_cuvslam.launch.py
+---
+/**:
+    ros__parameters:
+        general:
+            # cuVSLAM consumes the MONO8 rectified stereo pair
+            # (/zed/zed_node/{left,right}/gray/rect/image). Off by default.
+            publish_gray: true
+            publish_left_right: true
+        depth:
+            # NONE: no depth extraction. This image has no TensorRT, so the
+            # default NEURAL_LIGHT mode fails with "NEURAL TRT NOT FOUND" /
+            # "CORRUPTED SDK INSTALLATION". NONE also disables the ZED's own
+            # positional tracking, object detection and mapping -- all of
+            # which we want off here anyway (cuVSLAM owns odometry).
+            depth_mode: 'NONE'
+        pos_tracking:
+            # Redundant with depth_mode NONE, but explicit: cuVSLAM is the
+            # odometry source, the ZED node must not also publish odom->base.
+            pos_tracking_enabled: false
+        object_detection:
+            od_enabled: false
+        body_tracking:
+            bt_enabled: false
