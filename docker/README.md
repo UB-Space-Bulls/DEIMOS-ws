@@ -35,7 +35,14 @@ you'd otherwise have to remember by hand:
 - `--user $(id -u):$(id -g)` — runs the container as your host user instead
   of root, so files `colcon build` creates in the bind-mounted `rover_ws`
   come out owned by you, not root (see the "Common footguns" note in the
-  top-level `CLAUDE.md` for what happens if this gets skipped).
+  top-level `CLAUDE.md` for what happens if this gets skipped). The image
+  bakes in a `dev` account (UID/GID 1000, the default first-user ID on a
+  fresh single-user Linux or WSL2 box) with passwordless `sudo`, so on most
+  machines `--user` lands you on that real account — a proper `$HOME`,
+  `whoami` works, and `sudo apt-get install <package>` works mid-session
+  without a password prompt. If your host UID/GID isn't 1000, rebuild with
+  `docker build --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -f docker/dockerfile.dev -t rover-dev .`
+  so the baked-in account matches your host user too.
 
 Once you're in the container:
 

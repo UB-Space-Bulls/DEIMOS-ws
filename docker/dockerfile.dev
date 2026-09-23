@@ -16,7 +16,7 @@ ENV ROS_DISTRO=jazzy
 # Dev tooling
 # -----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git curl wget vim nano \
+    build-essential git curl wget vim nano sudo \
     python3-pip python3-venv \
     ros-dev-tools \
     ros-jazzy-ament-lint-auto \
@@ -74,6 +74,27 @@ WORKDIR ${ROS_WS}
 # development, rather than COPY-ing it in — you want live edits to show up
 # without rebuilding the image every time.
 
+# -----------------------------------------------------------------------------
+# Non-root dev user
+# `run-dev.sh` runs the container with `--user $(id -u):$(id -g)` so files
+# `colcon build` writes into the bind-mounted rover_ws come out host-owned
+# instead of root-owned (see CLAUDE.md's "Host vs. container UID mismatch"
+# footgun). But a container that only has `root` defined has no account for
+# that host UID to land on: no $HOME, no shell identity, and no sudo -- so
+# mid-session `apt-get install` and anything else expecting a real user
+# breaks. Baking in an actual `dev` account fixes that. Default UID/GID 1000
+# matches the first-user default on a fresh single-user Linux or WSL2 box; if
+# your host UID differs, rebuild with
+# `--build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g)`.
+# -----------------------------------------------------------------------------
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupadd -g ${USER_GID} dev \
+    && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash dev \
+    && echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev \
+    && chmod 0440 /etc/sudoers.d/dev \
+    && chown -R dev:dev ${ROS_WS}
+
 # ros_entrypoint.sh only sources ROS for the container's first process, so a
 # second terminal opened via `docker exec -it <container> bash` skips it and
 # gets a bare shell (no `ros2` command, no workspace packages). Sourcing from
@@ -89,5 +110,8 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc && \
 # -----------------------------------------------------------------------------
 COPY docker/ros_entrypoint.sh /
 RUN chmod +x /ros_entrypoint.sh
+
+USER dev
+
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
