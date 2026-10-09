@@ -163,6 +163,10 @@
       },
       "synchronize": false,
       "imageMode": {}
+    },
+    "Plot!3c7w8j4": {
+      "minYValue": 0,
+      "maxYValue": 1
     }
   },
   "globalVariables": {},
@@ -181,7 +185,11 @@
       "direction": "column"
     },
     "second": {
-      "first": "map!1fdvn0g",
+      "first": {
+        "first": "Plot!3c7w8j4",
+        "second": "map!1fdvn0g",
+        "direction": "row"
+      },
       "second": "3D!ygdgsi",
       "direction": "column"
     },
