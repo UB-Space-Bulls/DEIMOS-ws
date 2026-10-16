@@ -39,6 +39,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-rviz2 \
     && rm -rf /var/lib/apt/lists/*
 
+#-----------------------------------------------------------------------------
+#FoxGlove (UI)
+#-----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-jazzy-foxglove-bridge \
+	&& rm -rf /var/lib/apt/lists/*
+
 # -----------------------------------------------------------------------------
 # Zenoh RMW
 # -----------------------------------------------------------------------------
