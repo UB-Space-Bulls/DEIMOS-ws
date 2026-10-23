@@ -117,9 +117,9 @@ def generate_launch_description():
             "-d",
             PathJoinSubstitution(
                 [
-                    FindPackageShare("nav2_bringup"),
+                    FindPackageShare("rover_navigation"),
                     "rviz",
-                    "nav2_default_view.rviz",
+                    "nav2.rviz",
                 ]
             ),
         ],
